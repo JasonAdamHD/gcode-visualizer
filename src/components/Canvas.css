@@ -1,0 +1,159 @@
+.canvas-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+}
+
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.toolbar input[type='number'] {
+  width: 72px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+}
+
+.toolbar button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toolbar button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar .divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+}
+
+.toolbar .status {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.drawing-svg {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--canvas-bg);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.sheet {
+  fill: var(--sheet-bg);
+  stroke: var(--text-h);
+  stroke-width: 0.3;
+  vector-effect: non-scaling-stroke;
+}
+
+.grid-line {
+  stroke: var(--grid-line);
+}
+
+.drawn-path {
+  stroke: var(--text-h);
+  fill: none;
+}
+
+.drawn-path.closed {
+  color: var(--accent-bg);
+  stroke: var(--text-h);
+}
+
+.preview-line {
+  stroke: var(--accent);
+  stroke-dasharray: 2 2;
+  fill: none;
+}
+
+.handle {
+  fill: var(--bg);
+  stroke: var(--text);
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+}
+
+.handle:hover {
+  stroke: var(--accent);
+}
+
+.handle-arc {
+  fill: var(--accent-bg);
+  stroke: var(--accent);
+}
+
+.endpoint-dot {
+  fill: var(--text-h);
+}
+
+.draft-point {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.snap-indicator {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 0.4;
+  opacity: 0.4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.snap-indicator.snap-endpoint {
+  stroke: var(--accent);
+  opacity: 0.9;
+}
+
+.snap-indicator.snap-grid {
+  stroke: var(--accent);
+  opacity: 0.5;
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
