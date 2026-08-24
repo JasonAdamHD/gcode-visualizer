@@ -4,7 +4,7 @@ import { distance } from './segment';
 export type SnapResult = {
   point: Point;
   snapped: boolean;
-  type?: 'endpoint' | 'grid';
+  type?: 'endpoint' | 'grid' | 'axis' | 'none';
 };
 
 const EPSILON_SIZE = 1e-3;
@@ -64,4 +64,20 @@ export function findSnapPoint(
   }
 
   return { point: candidate, snapped: false };
+}
+
+export function constrainToAxis(reference: Point, candidate: Point): SnapResult {
+  const dx = candidate.x - reference.x;
+  const dy = candidate.y - reference.y;
+  if (Math.abs(dx) < Math.abs(dy)) {
+    const point: Point = { x: reference.x, y: candidate.y };
+    return { point: point, snapped: true, type: 'axis' };
+  } else {
+    const point: Point = { x: candidate.x, y: reference.y };
+    return { point: point, snapped: true, type: 'axis' };
+  }
+}
+
+export function snapToNothing(reference: Point): SnapResult {
+  return { point: { x: reference.x, y: reference.y }, snapped: false, type: 'none' };
 }

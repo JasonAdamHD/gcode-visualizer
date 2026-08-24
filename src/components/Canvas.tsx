@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Point } from '../geometry/segment';
 import { pathToSvgPath, segmentHandlePoint } from '../geometry/segment';
-import { findSnapPoint, niceGridSpacing, snapToGrid, type SnapResult } from '../geometry/snapping';
+import { findSnapPoint, constrainToAxis, snapToNothing, niceGridSpacing, snapToGrid, type SnapResult } from '../geometry/snapping';
 import { useDrawingState } from '../state/useDrawingState';
 import './Canvas.css';
 
@@ -46,7 +46,21 @@ export function Canvas() {
         drawing.updateDrag(snapToGrid(world, gridSpacing));
         return;
       }
-      setHover(findSnapPoint(world, drawing.segments, gridSpacing, tolerance));
+      if (drawing.draftStart === null) {
+        return null;
+      }
+      switch (e.ctrlKey ? 'ctrl' : e.metaKey ? 'meta' : e.shiftKey ? 'shift' : 'none') {
+        case 'ctrl':
+        case 'meta':
+          setHover(constrainToAxis(drawing.draftStart, world));
+          break;
+        case 'shift':
+          setHover(snapToNothing(world));
+          break;
+        default:
+          setHover(findSnapPoint(world, drawing.segments, gridSpacing, tolerance));
+          break;
+      }
     },
     [drawing, gridSpacing, screenToWorld, tolerance]
   );
