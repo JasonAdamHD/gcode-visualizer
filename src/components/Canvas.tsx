@@ -46,12 +46,11 @@ export function Canvas() {
         drawing.updateDrag(snapToGrid(world, gridSpacing));
         return;
       }
-      if (drawing.draftStart === null) {
-        return null;
-      }
+      
       switch (e.ctrlKey ? 'ctrl' : e.metaKey ? 'meta' : e.shiftKey ? 'shift' : 'none') {
         case 'ctrl':
         case 'meta':
+          if (drawing.draftStart === null) return null;
           setHover(constrainToAxis(drawing.draftStart, world));
           break;
         case 'shift':
