@@ -13,8 +13,8 @@ and frontend ability.
 
 1. **Draw** a 2D cut path on a virtual sheet by clicking to place line
    segments, with snapping to the grid, to existing points, and to the
-   X/Y axis relative to your last point, plus the ability to bow any segment
-   into an arc.
+   X/Y axis relative to your last point (Shift to bypass snapping entirely),
+   plus the ability to bow any segment into an arc.
 2. **Configure** machine parameters — units, sheet size, bit diameter/shape,
    feed speed, spoilboard penetration.
 3. **Compute** the actual toolpath: offset the drawn path by the bit radius
@@ -32,8 +32,8 @@ and frontend ability.
 ## Status
 
 - [x] Phase 1 — Drawing canvas: sheet boundary, grid, click-to-place line
-      segments, drag-to-bow arcs, snapping (grid, endpoint, and Ctrl
-      axis-lock), undo/redo, closed-path detection
+      segments, drag-to-bow arcs, snapping (grid, endpoint, Ctrl axis-lock,
+      Shift to disable), undo/redo, closed-path detection
 - [ ] Phase 2 — Parameters panel
 - [ ] Phase 3 — Toolpath math (offsetting, cut time)
 - [ ] Phase 4 — 3D visualization
@@ -58,7 +58,7 @@ and frontend ability.
 npm install
 npm run dev      # start the dev server
 npm run build    # typecheck + production build
-npm run lint      # oxlint
+npm run lint     # oxlint
 ```
 
 ## Project structure
