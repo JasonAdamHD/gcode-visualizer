@@ -4,7 +4,7 @@ import { distance } from './segment';
 export type SnapResult = {
   point: Point;
   snapped: boolean;
-  type?: 'endpoint' | 'grid' | 'axis' | 'none';
+  type?: 'endpoint' | 'grid' | 'axis' | 'no-snap' | 'none';
 };
 
 const EPSILON_SIZE = 1e-3;
@@ -113,5 +113,5 @@ export function constrainToAxis(reference: Point, candidate: Point): SnapResult 
  * @returns A SnapResult indicating that the candidate point is not snapped to any grid or axis.
 */
 export function snapToNothing(candidate: Point): SnapResult {
-  return { point: { x: candidate.x, y: candidate.y }, snapped: false, type: 'none' };
+  return { point: { x: candidate.x, y: candidate.y }, snapped: false, type: 'no-snap' };
 }

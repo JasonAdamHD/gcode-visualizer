@@ -211,13 +211,13 @@ export function Canvas() {
             />
           )}
 
-          {previewLine && (
+          {hover && previewLine && (
             <line
               x1={previewLine.from.x}
               y1={previewLine.from.y}
               x2={previewLine.to.x}
               y2={previewLine.to.y}
-              className="preview-line"
+              className={hover.type ? `preview-line line-${hover.type}` : 'preview-line'}
               strokeWidth={strokeThin * 2}
             />
           )}
@@ -269,7 +269,7 @@ export function Canvas() {
 
       <p className="hint">
         Click to place points and draw connected line segments. Drag a segment's midpoint handle to bow it into an
-        arc. Endpoints and grid intersections snap automatically.
+        arc. Endpoints and grid intersections snap automatically. Hold Shift to place a point anywhere, or Ctrl/Cmd to constrain the next point to a horizontal or vertical line from the last.
       </p>
     </div>
   );

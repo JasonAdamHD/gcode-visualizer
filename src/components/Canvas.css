@@ -99,12 +99,6 @@
   stroke: var(--text-h);
 }
 
-.preview-line {
-  stroke: var(--accent);
-  stroke-dasharray: 2 2;
-  fill: none;
-}
-
 .handle {
   fill: var(--bg);
   stroke: var(--text);
@@ -133,6 +127,32 @@
   vector-effect: non-scaling-stroke;
 }
 
+.preview-line {
+  stroke: var(--accent);
+  stroke-dasharray: 2 2;
+  fill: none;
+}
+
+.preview-line.line-endpoint {
+  stroke: var(--accent);
+}
+
+.preview-line.line-grid {
+  stroke: var(--accent);
+}
+
+.preview-line.line-axis {
+  stroke: lightcoral;
+}
+
+.preview-line.line-no-snap {
+  stroke: lightskyblue;
+}
+
+.preview-line.line-none {
+  stroke: var(--accent);
+}
+
 .snap-indicator {
   fill: none;
   stroke: var(--text);
@@ -148,6 +168,21 @@
 }
 
 .snap-indicator.snap-grid {
+  stroke: var(--accent);
+  opacity: 0.5;
+}
+
+.snap-indicator.snap-axis {
+  stroke: var(--accent);
+  opacity: 0.5;
+}
+
+.snap-indicator.snap-no-snap {
+  stroke: var(--accent);
+  opacity: 0.5;
+}
+
+.snap-indicator.snap-none {
   stroke: var(--accent);
   opacity: 0.5;
 }
