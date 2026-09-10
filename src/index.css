@@ -49,7 +49,7 @@ body {
 }
 
 #root {
-  min-height: 100svh;
+  height: 100svh;
   display: flex;
   flex-direction: column;
 }
