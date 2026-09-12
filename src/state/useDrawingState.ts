@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
 import { useCallback, useMemo, useState } from 'react';
 import type { Path, Point, Segment } from '../geometry/segment';
 import { bulgeFromDrag, isPathClosed, pathLength, pointsEqual } from '../geometry/segment';

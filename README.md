@@ -81,6 +81,15 @@ npm run build    # typecheck + production build
 npm run lint     # oxlint
 ```
 
+## License
+
+[Mozilla Public License 2.0](LICENSE).
+
+You can use this commercially, and you can combine it with closed-source
+code. If you modify one of the files in this repo, that file's source has to
+stay open under the MPL — new files you add alongside it are yours to license
+however you want.
+
 ## Project structure
 
 ```
