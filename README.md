@@ -44,6 +44,26 @@ and frontend ability.
 - [ ] Phase 8 — 3D visualization enhancements (material removal, camera
       controls, better playback)
 
+## Privacy and data handling
+
+G-code often contains proprietary shop data; a customer's part program is
+their intellectual property. The design rule follows from that:
+
+**Parsing always happens in your browser. A file is uploaded only when you
+explicitly choose to save it.**
+
+- **Today:** there is no server at all. The app is entirely client-side, so
+  nothing you open ever leaves your machine. No account, no upload, no
+  telemetry.
+- **Planned:** an optional account for saving your *own* programs and sharing
+  a deep link to a specific line with a coworker. The parser stays on the
+  client even then — saving uploads the file and the results your browser
+  already computed, rather than recomputing them server-side.
+
+Treat the hosted version as a **demo and portfolio piece.** Once uploads
+exist: don't put anything through it you couldn't afford to lose or expose,
+and saved files will be deleted automatically after 30 days.
+
 ## Stack
 
 - React + TypeScript
