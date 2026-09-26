@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { Point } from '../geometry/segment';
 import { pathToSvgPath, segmentHandlePoint } from '../geometry/segment';
 import { findSnapPoint, constrainToAxis, snapToNothing, niceGridSpacing, snapToGrid, type SnapResult } from '../geometry/snapping';
@@ -12,6 +12,7 @@ import type { Drawing } from '../state/useDrawingState';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
 import type { Toolpath } from '../toolpath/toolpath';
+import './Workspace.css';
 import './Canvas.css';
 
 type SheetSize = { x: number; y: number };
@@ -24,6 +25,8 @@ type CanvasProps = {
   /** Cutter-center toolpath for the drawn path, drawn as an overlay. */
   toolpath: Toolpath;
   estimate: CutTimeEstimate;
+  /** The 2D/3D switch, rendered at the start of the toolbar. */
+  viewToggle: ReactNode;
 };
 
 /** Returns true when a key event is aimed at a form control, so global shortcuts leave it alone. */
@@ -34,7 +37,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
-export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate }: CanvasProps) {
+export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, viewToggle }: CanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<SnapResult | null>(null);
   // A pointerdown+move+up on a handle still synthesizes a 'click' on the
@@ -162,6 +165,8 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate }:
   return (
     <div className="canvas-workspace">
       <div className="toolbar">
+        {viewToggle}
+        <span className="divider" />
         <button type="button" onClick={drawing.undo} disabled={!drawing.canUndo}>
           Undo
         </button>
