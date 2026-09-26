@@ -29,6 +29,28 @@ and frontend ability.
    Z depth, unresolved arcs) — built for debugging real files, not just
    visualizing your own.
 
+## How this project is built
+
+Besides being a CNC tool, this project is practice in **agentic software
+engineering**. Most of the code is written by coding agents (Claude Code,
+locally and on the web), and my job is steering, reviewing, and deciding
+what ships:
+
+1. **Scope** a change as an issue or prompt: what to build, why, and how
+   it can be verified.
+2. **Delegate** it to an agent working on its own branch. The agent reads
+   [`CLAUDE.md`](CLAUDE.md) for architecture, conventions, and the definition
+   of done.
+3. **Verify** automatically: `npm run check` (lint, typecheck/build, unit
+   tests) runs locally, and the same steps run in CI on every PR.
+4. **Review and merge** by a human, iterating with the agent on review
+   comments.
+
+The guardrails that make this work live in the repo: `CLAUDE.md` for
+context, Vitest unit tests for the geometry code, a GitHub Actions CI
+workflow, and a SessionStart hook (`.claude/`) that installs dependencies so
+cloud agent sessions can run the checks immediately.
+
 ## Status
 
 - [x] Phase 1 — Drawing canvas: sheet boundary, grid, click-to-place line
@@ -71,6 +93,7 @@ and saved files will be deleted automatically after 30 days.
   snapping, rather than raw `<canvas>`)
 - Three.js for 3D toolpath simulation (Phase 4)
 - Vite
+- Vitest for unit tests
 
 ## Development
 
@@ -79,6 +102,8 @@ npm install
 npm run dev      # start the dev server
 npm run build    # typecheck + production build
 npm run lint     # oxlint
+npm run test     # unit tests (Vitest)
+npm run check    # lint + build + test, the definition of done
 ```
 
 ## License
@@ -94,8 +119,11 @@ however you want.
 
 ```
 /src
-  /geometry      # Segment/Path types, bulge (arc) math, snapping
+  /geometry      # Segment/Path types, bulge (arc) math, snapping (+ *.test.ts)
   /gcode         # G-code parsing -> Path, for import (Phase 5)
   /components    # UI components (Canvas, etc.)
   /state         # Drawing state, undo/redo
+/.claude         # Claude Code settings and SessionStart hook
+/.github         # CI workflow
+CLAUDE.md        # Guidance for coding agents
 ```
