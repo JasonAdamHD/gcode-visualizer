@@ -9,6 +9,7 @@ import { pathToSvgPath, segmentHandlePoint } from '../geometry/segment';
 import { findSnapPoint, constrainToAxis, snapToNothing, niceGridSpacing, snapToGrid, type SnapResult } from '../geometry/snapping';
 import type { Units } from '../machine/params';
 import type { Drawing } from '../state/useDrawingState';
+import type { Toolpath } from '../toolpath/toolpath';
 import './Canvas.css';
 
 type SheetSize = { x: number; y: number };
@@ -18,6 +19,8 @@ type CanvasProps = {
   /** Sheet extents in world units (`units`), origin at the lower-left corner. */
   sheet: SheetSize;
   units: Units;
+  /** Cutter-center toolpath for the drawn path, drawn as an overlay. */
+  toolpath: Toolpath;
 };
 
 /** Returns true when a key event is aimed at a form control, so global shortcuts leave it alone. */
@@ -28,7 +31,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
-export function Canvas({ drawing, sheet: sheetSize, units }: CanvasProps) {
+export function Canvas({ drawing, sheet: sheetSize, units, toolpath }: CanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<SnapResult | null>(null);
   // A pointerdown+move+up on a handle still synthesizes a 'click' on the
@@ -145,6 +148,9 @@ export function Canvas({ drawing, sheet: sheetSize, units }: CanvasProps) {
   const dotRadius = gridSpacing * 0.08;
   const snapRadius = gridSpacing * 0.18;
 
+  // Closed loops get a Z so the round join also applies at the start point.
+  const toolpathData = toolpath.loops.map((loop, i) => pathToSvgPath(loop) + (toolpath.closed[i] ? ' Z' : ''));
+
   const previewLine =
     drawing.draftStart && hover && !drawing.isDragging && !drawing.closed
       ? { from: drawing.draftStart, to: hover.point }
@@ -209,6 +215,19 @@ export function Canvas({ drawing, sheet: sheetSize, units }: CanvasProps) {
               fill={drawing.closed ? 'currentColor' : 'none'}
             />
           )}
+
+          {toolpathData.map((d, i) => (
+            <path key={`k${i}`} d={d} className="kerf" strokeWidth={2 * toolpath.radius} />
+          ))}
+          {toolpathData.map((d, i) => (
+            <path
+              key={`t${i}`}
+              d={d}
+              className="toolpath"
+              strokeWidth={strokeThin * 3}
+              strokeDasharray={`${gridSpacing * 0.1} ${gridSpacing * 0.06}`}
+            />
+          ))}
 
           {hover && previewLine && (
             <line

@@ -5,13 +5,20 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { Path, Point, Segment } from '../geometry/segment';
 import { bulgeFromDrag, isPathClosed, pathLength, pointsEqual, scalePath, scalePoint } from '../geometry/segment';
+import type { CutSide } from '../toolpath/offset';
 
 type DrawingState = {
   segments: Path;
   draftStart: Point | null;
+  /**
+   * Requested cutter side. Part of the snapshot so it is undoable (and can
+   * become per-path later); it may not fit the current closure, so readers
+   * pass it through `effectiveCutSide`.
+   */
+  cutSide: CutSide;
 };
 
-const EMPTY_STATE: DrawingState = { segments: [], draftStart: null };
+const EMPTY_STATE: DrawingState = { segments: [], draftStart: null, cutSide: 'outside' };
 
 type DragHandle = {
   segmentIndex: number;
@@ -38,12 +45,12 @@ export function useDrawingState() {
     (point: Point) => {
       if (isPathClosed(state.segments)) return;
       if (!state.draftStart) {
-        commit({ segments: state.segments, draftStart: point });
+        commit({ ...state, draftStart: point });
         return;
       }
       if (pointsEqual(state.draftStart, point)) return;
       const segment: Segment = { type: 'line', start: state.draftStart, end: point, bulge: 0 };
-      commit({ segments: [...state.segments, segment], draftStart: point });
+      commit({ ...state, segments: [...state.segments, segment], draftStart: point });
     },
     [state, commit]
   );
@@ -51,9 +58,9 @@ export function useDrawingState() {
   const deleteLast = useCallback(() => {
     if (state.segments.length > 0) {
       const removed = state.segments[state.segments.length - 1];
-      commit({ segments: state.segments.slice(0, -1), draftStart: removed.start });
+      commit({ ...state, segments: state.segments.slice(0, -1), draftStart: removed.start });
     } else if (state.draftStart) {
-      commit({ segments: [], draftStart: null });
+      commit({ ...state, segments: [], draftStart: null });
     }
   }, [state, commit]);
 
@@ -62,10 +69,17 @@ export function useDrawingState() {
     const first = state.segments[0].start;
     if (pointsEqual(first, state.draftStart)) return;
     const segment: Segment = { type: 'line', start: state.draftStart, end: first, bulge: 0 };
-    commit({ segments: [...state.segments, segment], draftStart: first });
+    commit({ ...state, segments: [...state.segments, segment], draftStart: first });
   }, [state, commit]);
 
   const reset = useCallback(() => commit(EMPTY_STATE), [commit]);
+
+  const setCutSide = useCallback(
+    (cutSide: CutSide) => {
+      if (cutSide !== state.cutSide) commit({ ...state, cutSide });
+    },
+    [state, commit]
+  );
 
   const undo = useCallback(() => setHistoryIndex((i) => Math.max(0, i - 1)), []);
   const redo = useCallback(
@@ -83,6 +97,7 @@ export function useDrawingState() {
     if (factor === 1) return;
     setHistory((prev) =>
       prev.map((snap) => ({
+        ...snap,
         segments: scalePath(snap.segments, factor),
         draftStart: snap.draftStart ? scalePoint(snap.draftStart, factor) : null,
       }))
@@ -112,7 +127,7 @@ export function useDrawingState() {
       const nextSegments = base.segments.map((s, i) =>
         i === drag.segmentIndex ? { ...s, bulge, type: (bulge ? 'arc' : 'line') as Segment['type'] } : s
       );
-      commit({ segments: nextSegments, draftStart: base.draftStart });
+      commit({ ...base, segments: nextSegments });
     }
     setDrag(null);
   }, [drag, commit]);
@@ -134,6 +149,8 @@ export function useDrawingState() {
   return {
     segments: displaySegments,
     draftStart: state.draftStart,
+    cutSide: state.cutSide,
+    setCutSide,
     placePoint,
     deleteLast,
     closePath,

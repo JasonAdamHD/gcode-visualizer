@@ -6,12 +6,20 @@ import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import type { BitKind, BitShape, FieldKey, MachineParams, Units } from '../machine/params';
 import { displayDecimals, formatNumber, parseParams, serializeParams, validateParams } from '../machine/params';
+import type { CutSide } from '../toolpath/offset';
+import type { Toolpath } from '../toolpath/toolpath';
 import { NumberField } from './NumberField';
 import './ParametersPanel.css';
 
 type ParametersPanelProps = {
   params: MachineParams;
   update: (updater: (prev: MachineParams) => MachineParams) => void;
+  toolpath: Toolpath;
+  /** Whether the drawn path is closed; picks which cut sides are offered. */
+  closed: boolean;
+  /** Current cut side, already valid for `closed`. */
+  cutSide: CutSide;
+  onCutSideChange: (side: CutSide) => void;
   /** Switches units; the caller also rescales the drawing. */
   onUnitsChange: (units: Units) => void;
   /** Applies imported params; the caller also rescales the drawing if units differ. */
@@ -27,6 +35,17 @@ const BIT_LABELS: Record<BitKind, string> = {
   vbit: 'V-bit',
 };
 
+const CLOSED_SIDES: [CutSide, string][] = [
+  ['outside', 'Outside'],
+  ['inside', 'Inside'],
+  ['on', 'On line'],
+];
+const OPEN_SIDES: [CutSide, string][] = [
+  ['left', 'Left'],
+  ['right', 'Right'],
+  ['on', 'On line'],
+];
+
 const DEFAULT_VBIT_ANGLE = 90;
 const EXPORT_FILENAME = 'cnc-params.json';
 
@@ -39,6 +58,10 @@ function shapeFor(kind: BitKind, current: BitShape): BitShape {
 export function ParametersPanel({
   params,
   update,
+  toolpath,
+  closed,
+  cutSide,
+  onCutSideChange,
   onUnitsChange,
   onImport,
   onReset,
@@ -208,6 +231,34 @@ export function ParametersPanel({
             {formatNumber(params.sheet.thickness + params.spoilboardPenetration, decimals)} {units}
           </output>
         </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Toolpath</legend>
+        <div className="segmented" role="group" aria-label="Cut side">
+          {(closed ? CLOSED_SIDES : OPEN_SIDES).map(([side, label]) => (
+            <button key={side} type="button" aria-pressed={cutSide === side} onClick={() => onCutSideChange(side)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="derived">
+          Compensation radius{' '}
+          <output>
+            {formatNumber(cutSide === 'on' ? 0 : toolpath.radius, decimals)} {units}
+          </output>
+        </p>
+        <p className="derived">
+          Toolpath length{' '}
+          <output>
+            {formatNumber(toolpath.length, 2)} {units}
+          </output>
+        </p>
+        {toolpath.warnings.map((w) => (
+          <p key={w} className="field-error toolpath-warning" role="status">
+            {w}
+          </p>
+        ))}
       </fieldset>
 
       <fieldset>

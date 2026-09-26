@@ -3,6 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 .canvas-workspace {
+  --toolpath: #0e8f7e;
+
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -111,6 +113,21 @@
   stroke: var(--text-h);
 }
 
+.kerf {
+  fill: none;
+  stroke: var(--toolpath);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+.toolpath {
+  fill: none;
+  stroke: var(--toolpath);
+  pointer-events: none;
+}
+
 .handle {
   fill: var(--bg);
   stroke: var(--text);
@@ -203,4 +220,10 @@
   margin: 0;
   font-size: 13px;
   color: var(--text);
+}
+
+@media (prefers-color-scheme: dark) {
+  .canvas-workspace {
+    --toolpath: #2dd4bf;
+  }
 }
