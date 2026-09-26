@@ -51,7 +51,10 @@ const BIT_LENGTH_DIAMETERS = 4;
 function webglAvailable(): boolean {
   try {
     const canvas = document.createElement('canvas');
-    return !!(canvas.getContext('webgl2') ?? canvas.getContext('webgl'));
+    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+    // Release the probe right away; browsers cap the number of live contexts.
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return gl !== null;
   } catch {
     return false;
   }
@@ -136,7 +139,9 @@ export default function Viewer3D({ moves, params, estimate, position, viewToggle
   useEffect(() => {
     const host = hostRef.current;
     if (!host || webglError) return;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // Throws if the context cannot be created after all; ViewErrorBoundary shows that.
+    // The log depth buffer keeps depth precise with the near plane close enough to inspect the bit.
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, logarithmicDepthBuffer: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     host.appendChild(renderer.domElement);
 
@@ -186,6 +191,7 @@ export default function Viewer3D({ moves, params, estimate, position, viewToggle
       controls.dispose();
       clearGroup(scene);
       renderer.dispose();
+      renderer.forceContextLoss();
       renderer.domElement.remove();
     };
   }, [webglError]);
@@ -205,7 +211,7 @@ export default function Viewer3D({ moves, params, estimate, position, viewToggle
     const distance = (radius / Math.sin(THREE.MathUtils.degToRad(s.camera.fov / 2))) * 0.9;
     const dir = new THREE.Vector3(-0.35, -1, 0.9).normalize();
     s.camera.position.copy(target).addScaledVector(dir, distance);
-    s.camera.near = distance / 100;
+    s.camera.near = distance / 10000;
     s.camera.far = distance * 20;
     s.camera.updateProjectionMatrix();
     s.controls.target.copy(target);

@@ -5,6 +5,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Canvas } from './components/Canvas';
 import { ParametersPanel } from './components/ParametersPanel';
+import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 import type { ViewMode } from './components/ViewToggle';
 import { ViewToggle } from './components/ViewToggle';
 import type { MachineParams, Units } from './machine/params';
@@ -99,9 +100,11 @@ function App() {
       </header>
       <main className="app-main">
         {view === '3d' ? (
-          <Suspense fallback={<div className="canvas-workspace view-loading">Loading 3D view…</div>}>
-            <Viewer3D moves={moves} params={params} estimate={estimate} position={bitPosition} viewToggle={viewToggle} />
-          </Suspense>
+          <ViewErrorBoundary viewToggle={viewToggle}>
+            <Suspense fallback={<div className="canvas-workspace view-loading">Loading 3D view…</div>}>
+              <Viewer3D moves={moves} params={params} estimate={estimate} position={bitPosition} viewToggle={viewToggle} />
+            </Suspense>
+          </ViewErrorBoundary>
         ) : (
           <Canvas
             drawing={drawing}
