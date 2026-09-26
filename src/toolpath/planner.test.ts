@@ -66,8 +66,9 @@ describe('planTime: straight lines', () => {
 
 describe('junctionSpeed', () => {
   it('matches the GRBL formula at a 90° corner', () => {
-    // cosθ = 0, so s = sqrt(0.5) and v² = 10 · 0.01 · s / (1 − s) ≈ 0.2414.
-    expect(junctionSpeed(p(1, 0), p(0, 1), 10, 0.01)).toBeCloseTo(Math.sqrt(0.24142135623730953), 12);
+    // cosθ = 0, so s = sqrt(0.5) and v² = a · deviation · s / (1 − s).
+    const s = Math.SQRT1_2;
+    expect(junctionSpeed(p(1, 0), p(0, 1), 10, 0.01)).toBeCloseTo(Math.sqrt((10 * 0.01 * s) / (1 - s)), 12);
   });
 
   it('is 0 for a reversal and unlimited straight ahead', () => {
