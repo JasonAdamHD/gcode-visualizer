@@ -87,6 +87,9 @@
 
 .segmented button:last-child {
   border-radius: 0 6px 6px 0;
+}
+
+.segmented button + button {
   border-left: none;
 }
 
@@ -146,6 +149,11 @@
   margin: 0;
   justify-self: auto;
   overflow-wrap: anywhere;
+}
+
+.toolpath-warning {
+  margin: 0;
+  justify-self: auto;
 }
 
 .derived {

@@ -2,13 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Canvas } from './components/Canvas';
 import { ParametersPanel } from './components/ParametersPanel';
 import type { MachineParams, Units } from './machine/params';
 import { DEFAULT_PARAMS, unitFactor } from './machine/params';
 import { useDrawingState } from './state/useDrawingState';
 import { useMachineParams } from './state/useMachineParams';
+import { effectiveCutSide } from './toolpath/offset';
+import { computeToolpath } from './toolpath/toolpath';
 
 const PANEL_OPEN_KEY = 'cnc-visualizer.panelOpen';
 
@@ -53,16 +55,27 @@ function App() {
     [params.units, rescale, replace]
   );
 
+  // Uses the display segments, so the offset follows a live arc drag.
+  const cutSide = effectiveCutSide(drawing.cutSide, drawing.closed);
+  const toolpath = useMemo(
+    () => computeToolpath(drawing.segments, drawing.closed, cutSide, params),
+    [drawing.segments, drawing.closed, cutSide, params]
+  );
+
   return (
     <div className="app">
       <header className="app-header">
         <h1>CNC Toolpath Visualizer</h1>
       </header>
       <main className="app-main">
-        <Canvas drawing={drawing} sheet={params.sheet} units={params.units} />
+        <Canvas drawing={drawing} sheet={params.sheet} units={params.units} toolpath={toolpath} />
         <ParametersPanel
           params={params}
           update={update}
+          toolpath={toolpath}
+          closed={drawing.closed}
+          cutSide={cutSide}
+          onCutSideChange={drawing.setCutSide}
           onUnitsChange={applyUnits}
           onImport={applyParams}
           onReset={() => applyParams(DEFAULT_PARAMS)}
