@@ -89,8 +89,6 @@ function App() {
   );
   const moves = useMemo(() => buildMoves(toolpath.loops, toolpath.closed, params), [toolpath, params]);
   const estimate = useMemo(() => estimateCutTime(moves, params), [moves, params]);
-  // The bit rests at home until playback (Phase 4, PR 3) moves it.
-  const bitPosition = useMemo(() => ({ x: 0, y: 0, z: params.safeHeight }), [params.safeHeight]);
   const viewToggle = <ViewToggle view={view} onChange={setView} />;
 
   return (
@@ -102,7 +100,7 @@ function App() {
         {view === '3d' ? (
           <ViewErrorBoundary viewToggle={viewToggle}>
             <Suspense fallback={<div className="canvas-workspace view-loading">Loading 3D view…</div>}>
-              <Viewer3D moves={moves} params={params} estimate={estimate} position={bitPosition} viewToggle={viewToggle} />
+              <Viewer3D moves={moves} params={params} estimate={estimate} viewToggle={viewToggle} />
             </Suspense>
           </ViewErrorBoundary>
         ) : (

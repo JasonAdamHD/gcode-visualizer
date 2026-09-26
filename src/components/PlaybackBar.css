@@ -1,0 +1,38 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+.playback-bar button:first-child {
+  min-width: 64px;
+}
+
+.playback-scrubber {
+  flex: 1;
+  min-width: 120px;
+  accent-color: var(--accent);
+}
+
+.playback-bar select {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 13px;
+}
+
+.playback-time,
+.playback-readout {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.playback-time {
+  color: var(--text-h);
+}
+
+.playback-readout {
+  color: var(--text);
+}
