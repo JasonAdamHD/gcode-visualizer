@@ -86,8 +86,8 @@ Every change follows these steps, in order. No exceptions for small fixes.
 
 A PreToolUse hook (`.claude/hooks/guard-master.mjs`) enforces step 1: while
 the checkout is on `master`, it blocks edits to files in the repo and
-`git commit`/`push`/`merge`. Create the branch as its own command, then
-continue.
+`git commit`/`push`/`merge`. From any branch it also blocks pushes that
+target `master`. Create the branch as its own command, then continue.
 
 Also:
 
