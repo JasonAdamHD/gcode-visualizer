@@ -143,3 +143,22 @@ export function pathLength(path: Path): number {
   }
   return total;
 }
+
+/** Uniformly scales a point about the world origin by `factor`. */
+export function scalePoint(p: Point, factor: number): Point {
+  return { x: p.x * factor, y: p.y * factor };
+}
+
+/**
+ * Uniformly scales a path about the world origin by `factor` (e.g. 25.4 to
+ * convert inches to millimeters). Bulges are left unchanged: bulge =
+ * tan(θ/4) depends only on the arc's included angle, which a uniform scale
+ * preserves, so scaling the endpoints scales the arcs too.
+ */
+export function scalePath(path: Path, factor: number): Path {
+  return path.map((seg) => ({
+    ...seg,
+    start: scalePoint(seg.start, factor),
+    end: scalePoint(seg.end, factor),
+  }));
+}
