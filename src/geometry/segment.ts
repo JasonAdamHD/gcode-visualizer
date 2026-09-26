@@ -58,7 +58,9 @@ export function arcFromBulge(start: Point, end: Point, bulge: number): ArcGeomet
   const radius = Math.abs((chordLength * (1 + bulge * bulge)) / (4 * bulge));
   const centerOffset = (chordLength * (1 - bulge * bulge)) / (4 * bulge);
   const mid = midpoint(start, end);
-  const center = { x: mid.x + px * centerOffset, y: mid.y + py * centerOffset };
+  // The arc bows toward +p (see sagittaPoint), so for a minor arc the center
+  // sits on the opposite side of the chord.
+  const center = { x: mid.x - px * centerOffset, y: mid.y - py * centerOffset };
 
   return {
     center,
