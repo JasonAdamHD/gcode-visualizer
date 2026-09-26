@@ -66,8 +66,31 @@ npm run check        # lint + build + test: run before every commit
 
 ## Workflow
 
-- Work on a feature branch and open a PR; don't push to `master`.
-- Keep commits small and focused, with messages that explain *why*.
+Every change follows these steps, in order. No exceptions for small fixes.
+
+1. **Never change `master`.** Before the first edit, branch off an
+   up-to-date `master`: `git switch master`, `git pull`, then
+   `git switch -c <type>/<short-name>` (e.g. `feat/arc-offset`,
+   `fix/bulge-sign`, `chore/ci-cache`). All commits go on that branch.
+2. **Implement** in small, focused commits with messages that explain
+   *why*. `npm run check` must pass before each commit.
+3. **Open a PR**: push the branch and run `gh pr create` with a summary,
+   the reason for the change, and how to verify it.
+4. **Review the PR** with Claude: `/code-review <PR number>`.
+5. **Address every finding**: fix it in a new commit on the branch, or
+   explain in the PR why it doesn't apply. Re-run `npm run check` and push;
+   re-review if the fixes were non-trivial.
+6. **Hand off for merge** once CI is green and findings are resolved: report
+   the PR as ready. A human merges. Agents never merge PRs or push to
+   `master`.
+
+A PreToolUse hook (`.claude/hooks/guard-master.mjs`) enforces step 1: while
+the checkout is on `master`, it blocks edits to files in the repo and
+`git commit`/`push`/`merge`. Create the branch as its own command, then
+continue.
+
+Also:
+
 - When a roadmap item lands, tick it off in the README's **Status** list.
 - If you notice an unrelated problem, note it for a separate change rather
   than widening the current one.
