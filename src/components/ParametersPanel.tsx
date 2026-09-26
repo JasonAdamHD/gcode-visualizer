@@ -215,6 +215,8 @@ export function ParametersPanel({
         <legend>Feeds</legend>
         {field('feedRate', 'Feed rate', params.feedRate, (p, feedRate) => ({ ...p, feedRate }), rate)}
         {field('plungeRate', 'Plunge rate', params.plungeRate, (p, plungeRate) => ({ ...p, plungeRate }), rate)}
+        {field('rapidRateXY', 'Rapid XY', params.rapidRateXY, (p, rapidRateXY) => ({ ...p, rapidRateXY }), rate)}
+        {field('rapidRateZ', 'Rapid Z', params.rapidRateZ, (p, rapidRateZ) => ({ ...p, rapidRateZ }), rate)}
       </fieldset>
 
       <fieldset>
@@ -225,12 +227,31 @@ export function ParametersPanel({
           params.spoilboardPenetration,
           (p, spoilboardPenetration) => ({ ...p, spoilboardPenetration })
         )}
+        {field('depthPerPass', 'Depth per pass', params.depthPerPass, (p, depthPerPass) => ({ ...p, depthPerPass }))}
         <p className="derived">
           Total cut depth{' '}
           <output>
             {formatNumber(params.sheet.thickness + params.spoilboardPenetration, decimals)} {units}
           </output>
         </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Machine</legend>
+        {field('safeHeight', 'Safe height', params.safeHeight, (p, safeHeight) => ({ ...p, safeHeight }))}
+        {field(
+          'acceleration',
+          'Acceleration',
+          params.acceleration,
+          (p, acceleration) => ({ ...p, acceleration }),
+          `${units}/s²`
+        )}
+        {field(
+          'junctionDeviation',
+          'Junction deviation',
+          params.junctionDeviation,
+          (p, junctionDeviation) => ({ ...p, junctionDeviation })
+        )}
       </fieldset>
 
       <fieldset>
