@@ -260,7 +260,10 @@ export function ParametersPanel({
           'junctionDeviation',
           'Junction deviation',
           params.junctionDeviation,
-          (p, junctionDeviation) => ({ ...p, junctionDeviation })
+          (p, junctionDeviation) => ({ ...p, junctionDeviation }),
+          units,
+          // Typical values are thousandths of a mm, below the usual length precision.
+          decimals + 2
         )}
       </fieldset>
 
