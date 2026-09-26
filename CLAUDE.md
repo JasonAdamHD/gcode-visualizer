@@ -74,8 +74,15 @@ Every change follows these steps, in order. No exceptions for small fixes.
    `fix/bulge-sign`, `chore/ci-cache`). All commits go on that branch.
 2. **Implement** in small, focused commits with messages that explain
    *why*. `npm run check` must pass before each commit.
-3. **Open a PR**: push the branch and run `gh pr create` with a summary,
-   the reason for the change, and how to verify it.
+3. **Open a PR**: push the branch and run `gh pr create`. The description
+   has these sections:
+   - **Summary**: what changed.
+   - **Why**: the reason for the change.
+   - **Verified**: what you actually ran and the results (e.g.
+     `npm run check` passes, cases exercised, behavior observed in the
+     app). Verifying is the agent's job; never list steps you didn't run.
+   - **Reviewer spot-check (optional)**: the one or two quickest ways for
+     the human to confirm the change themselves, if they want to.
 4. **Review the PR** with Claude: `/code-review <PR number>`.
 5. **Address every finding**: fix it in a new commit on the branch, or
    explain in the PR why it doesn't apply. Re-run `npm run check` and push;
