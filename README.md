@@ -59,13 +59,17 @@ from changing `master` directly.
 - [x] Phase 1 — Drawing canvas: sheet boundary, grid, click-to-place line
       segments, drag-to-bow arcs, snapping (grid, endpoint, Ctrl axis-lock,
       Shift to disable), undo/redo, closed-path detection
-- [ ] Phase 2 — Parameters panel
+- [x] Phase 2 — Parameters panel: collapsible sidebar for units (in/mm,
+      converting sheet, drawing, bit, and feeds), sheet size/thickness,
+      flat/ball/V-bit, feed/plunge rates, spoilboard penetration; saved in
+      localStorage with JSON settings-file import/export
 - [ ] Phase 3 — Toolpath math (offsetting, cut time)
 - [ ] Phase 4 — 3D visualization
 - [ ] Phase 5 — G-code import + debugging (parser, step-through, error flags)
 - [ ] Phase 6 — Drawing canvas enhancements (pocket clearing, tabs,
       lead-in/lead-out, manual repair of an imported path)
-- [ ] Phase 7 — Parameters panel enhancements (tool library, multiple passes)
+- [ ] Phase 7 — Parameters panel enhancements (tool library, multiple passes,
+      custom (drawn) bit profiles)
 - [ ] Phase 8 — 3D visualization enhancements (material removal, camera
       controls, better playback)
 
@@ -123,9 +127,10 @@ however you want.
 ```
 /src
   /geometry      # Segment/Path types, bulge (arc) math, snapping (+ *.test.ts)
+  /machine       # Machine/job parameters: units, conversion, validation (+ *.test.ts)
   /gcode         # G-code parsing -> Path, for import (Phase 5)
-  /components    # UI components (Canvas, etc.)
-  /state         # Drawing state, undo/redo
+  /components    # UI components (Canvas, ParametersPanel, etc.)
+  /state         # Drawing state (undo/redo), persisted machine params
 /.claude         # Claude Code settings and SessionStart hook
 /.github         # CI workflow
 CLAUDE.md        # Guidance for coding agents

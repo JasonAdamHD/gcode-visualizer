@@ -36,9 +36,19 @@ npm run check        # lint + build + test: run before every commit
     DXF **bulge** convention (`bulge = tan(θ/4)`, 0 = straight, positive =
     counterclockwise); SVG path generation; path length and closure.
   - `snapping.ts`: grid spacing, endpoint/grid/axis snapping.
+- `src/machine/params.ts` holds the pure `MachineParams` model (units,
+  sheet, bit shape, feeds, spoilboard penetration): defaults, in/mm
+  conversion, field validation, and JSON (de)serialization shared by
+  localStorage and settings-file import. `BitShape` is a discriminated union
+  so a custom drawn profile can be added later.
 - `src/state/useDrawingState.ts` is a React hook holding drawing state as
   immutable snapshots in a history array (undo/redo moves an index). Arc
   bowing uses a transient drag state that commits one snapshot on release.
+- `src/state/useMachineParams.ts` holds `MachineParams`, persisted to
+  localStorage. It knows nothing about the drawing.
+- `src/App.tsx` owns both hooks. Units live **outside** drawing history: a
+  unit change (toggle, import, reset) rescales every history snapshot in
+  place via `rescale`, so undo never shows inch geometry on an mm sheet.
 - `src/components/Canvas.tsx` does SVG rendering and pointer handling. It
   converts screen coordinates to world coordinates and picks the snap mode
   from modifier keys (Ctrl/Cmd = axis lock, Shift = no snap).
