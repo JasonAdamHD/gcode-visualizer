@@ -67,7 +67,11 @@ from changing `master` directly.
       right/on, via cavalier-contours-js) with a kerf overlay, depth passes,
       and a cut-time estimate from a GRBL-style planner (rapids, plunges,
       retracts, acceleration and corner slowdowns)
-- [ ] Phase 4 — 3D visualization
+- [x] Phase 4 — 3D visualization: lazily loaded Three.js view (2D/3D
+      toggle) of the sheet, spoilboard, toolpath and bit, with playback
+      (play/pause, scrub, speed) timed by the same planner as the cut-time
+      estimate, so the bit slows into corners and the traversed path is
+      highlighted
 - [ ] Phase 5 — G-code import + debugging (parser, step-through, error flags).
       The initial import supports basic, standard G-code syntax only:
       G0/G1/G2/G3 (arcs by I/J or R, XY plane), G20/G21 units,
@@ -137,9 +141,11 @@ however you want.
 /src
   /geometry      # Segment/Path types, bulge (arc) math, snapping (+ *.test.ts)
   /machine       # Machine/job parameters: units, conversion, validation (+ *.test.ts)
+  /toolpath      # Cutter compensation, moves, planner, cut-time estimate, playback timeline (+ *.test.ts)
+  /sim           # Pure 3D scene data: line buffers, bit profiles (+ *.test.ts)
   /gcode         # G-code parsing -> Path, for import (Phase 5)
-  /components    # UI components (Canvas, ParametersPanel, etc.)
-  /state         # Drawing state (undo/redo), persisted machine params
+  /components    # UI components (Canvas, Viewer3D, PlaybackBar, ParametersPanel, etc.)
+  /state         # Drawing state (undo/redo), persisted machine params, playback clock
 /.claude         # Claude Code settings and SessionStart hook
 /.github         # CI workflow
 /docs/plans      # Working plans handed to implementing agents
