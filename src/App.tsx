@@ -9,6 +9,8 @@ import type { MachineParams, Units } from './machine/params';
 import { DEFAULT_PARAMS, unitFactor } from './machine/params';
 import { useDrawingState } from './state/useDrawingState';
 import { useMachineParams } from './state/useMachineParams';
+import { estimateCutTime } from './toolpath/estimate';
+import { buildMoves } from './toolpath/moves';
 import { effectiveCutSide } from './toolpath/offset';
 import { computeToolpath } from './toolpath/toolpath';
 
@@ -61,6 +63,10 @@ function App() {
     () => computeToolpath(drawing.segments, drawing.closed, cutSide, params),
     [drawing.segments, drawing.closed, cutSide, params]
   );
+  const estimate = useMemo(
+    () => estimateCutTime(buildMoves(toolpath.loops, toolpath.closed, params), params),
+    [toolpath, params]
+  );
 
   return (
     <div className="app">
@@ -68,11 +74,12 @@ function App() {
         <h1>CNC Toolpath Visualizer</h1>
       </header>
       <main className="app-main">
-        <Canvas drawing={drawing} sheet={params.sheet} units={params.units} toolpath={toolpath} />
+        <Canvas drawing={drawing} sheet={params.sheet} units={params.units} toolpath={toolpath} estimate={estimate} />
         <ParametersPanel
           params={params}
           update={update}
           toolpath={toolpath}
+          estimate={estimate}
           closed={drawing.closed}
           cutSide={cutSide}
           onCutSideChange={drawing.setCutSide}

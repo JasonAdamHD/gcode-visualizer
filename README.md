@@ -63,7 +63,10 @@ from changing `master` directly.
       converting sheet, drawing, bit, and feeds), sheet size/thickness,
       flat/ball/V-bit, feed/plunge rates, spoilboard penetration; saved in
       localStorage with JSON settings-file import/export
-- [ ] Phase 3 — Toolpath math (offsetting, cut time)
+- [x] Phase 3 — Toolpath math: cutter compensation (outside/inside/left/
+      right/on, via cavalier-contours-js) with a kerf overlay, depth passes,
+      and a cut-time estimate from a GRBL-style planner (rapids, plunges,
+      retracts, acceleration and corner slowdowns)
 - [ ] Phase 4 — 3D visualization
 - [ ] Phase 5 — G-code import + debugging (parser, step-through, error flags)
 - [ ] Phase 6 — Drawing canvas enhancements (pocket clearing, tabs,

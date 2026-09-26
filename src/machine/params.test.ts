@@ -38,7 +38,7 @@ describe('convertParams', () => {
     expect(convertParams(DEFAULT_PARAMS, 'in')).toBe(DEFAULT_PARAMS);
   });
 
-  it('scales every length and rate, preserving the V-bit angle', () => {
+  it('scales every length, rate and acceleration, preserving the V-bit angle', () => {
     const mm = convertParams(vbit, 'mm');
     expect(mm.units).toBe('mm');
     expect(mm.sheet.x).toBeCloseTo(2438.4);
@@ -48,6 +48,12 @@ describe('convertParams', () => {
     expect(mm.feedRate).toBeCloseTo(5080);
     expect(mm.plungeRate).toBeCloseTo(1270);
     expect(mm.spoilboardPenetration).toBeCloseTo(0.254);
+    expect(mm.rapidRateXY).toBeCloseTo(10160);
+    expect(mm.rapidRateZ).toBeCloseTo(3810);
+    expect(mm.safeHeight).toBeCloseTo(12.7);
+    expect(mm.depthPerPass).toBeCloseTo(6.35);
+    expect(mm.acceleration).toBeCloseTo(254);
+    expect(mm.junctionDeviation).toBeCloseTo(0.0508);
     expect(mm.bit.shape).toEqual({ kind: 'vbit', includedAngleDeg: 60 });
   });
 
@@ -61,6 +67,12 @@ describe('convertParams', () => {
       p.feedRate,
       p.plungeRate,
       p.spoilboardPenetration,
+      p.rapidRateXY,
+      p.rapidRateZ,
+      p.safeHeight,
+      p.depthPerPass,
+      p.acceleration,
+      p.junctionDeviation,
     ];
     flat(back).forEach((v, i) => expect(Math.abs(v - flat(vbit)[i])).toBeLessThan(1e-9));
     expect(back.units).toBe('in');
@@ -91,6 +103,15 @@ describe('validateParams', () => {
     expect(validateParams({ ...p, feedRate: 0 })).toHaveProperty(['feedRate']);
     expect(validateParams({ ...p, plungeRate: -5 })).toHaveProperty(['plungeRate']);
     expect(validateParams({ ...p, feedRate: NaN })).toHaveProperty(['feedRate']);
+    for (const key of ['rapidRateXY', 'rapidRateZ', 'safeHeight', 'depthPerPass', 'acceleration'] as const) {
+      expect(validateParams({ ...p, [key]: 0 })).toHaveProperty([key]);
+      expect(validateParams({ ...p, [key]: -1 })).toHaveProperty([key]);
+    }
+  });
+
+  it('allows zero junction deviation but rejects negative', () => {
+    expect(validateParams({ ...DEFAULT_PARAMS, junctionDeviation: 0 })).toEqual({});
+    expect(validateParams({ ...DEFAULT_PARAMS, junctionDeviation: -0.001 })).toHaveProperty(['junctionDeviation']);
   });
 
   it('allows zero penetration but rejects negative', () => {
@@ -116,7 +137,35 @@ describe('serializeParams / parseParams', () => {
   });
 
   it('includes the version', () => {
-    expect(serializeParams(DEFAULT_PARAMS)).toContain('"version": 1');
+    expect(serializeParams(DEFAULT_PARAMS)).toContain('"version": 2');
+  });
+
+  /** A version-1 file: no motion fields. */
+  const v1 = (params: MachineParams): string => {
+    const raw: Record<string, unknown> = JSON.parse(serializeParams(params));
+    for (const key of ['rapidRateXY', 'rapidRateZ', 'safeHeight', 'depthPerPass', 'acceleration', 'junctionDeviation']) {
+      delete raw[key];
+    }
+    raw.version = 1;
+    return JSON.stringify(raw);
+  };
+
+  it('migrates a version-1 inch file with the default motion fields', () => {
+    expect(parseParams(v1(vbit))).toEqual({ ok: true, params: vbit });
+  });
+
+  it('migrates a version-1 millimeter file with defaults converted to mm', () => {
+    const mm = convertParams(vbit, 'mm');
+    const result = parseParams(v1(mm));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.params.version).toBe(2);
+    expect(result.params.units).toBe('mm');
+    expect(result.params.sheet).toEqual(mm.sheet);
+    expect(result.params.rapidRateXY).toBeCloseTo(10160);
+    expect(result.params.safeHeight).toBeCloseTo(12.7);
+    expect(result.params.acceleration).toBeCloseTo(254);
+    expect(result.params.junctionDeviation).toBeCloseTo(0.0508);
   });
 
   it('drops unknown extra fields', () => {
@@ -128,7 +177,9 @@ describe('serializeParams / parseParams', () => {
     ['malformed JSON', '{not json'],
     ['non-object', '[1, 2]'],
     ['null', 'null'],
-    ['wrong version', withRaw((r) => (r.version = 2))],
+    ['wrong version', withRaw((r) => (r.version = 3))],
+    ['v2 missing a motion field', withRaw((r) => delete r.acceleration)],
+    ['negative junction deviation', withRaw((r) => (r.junctionDeviation = -1))],
     ['missing version', withRaw((r) => delete r.version)],
     ['bad units', withRaw((r) => (r.units = 'cm'))],
     ['missing sheet', withRaw((r) => delete r.sheet)],

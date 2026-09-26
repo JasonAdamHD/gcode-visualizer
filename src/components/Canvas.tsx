@@ -9,6 +9,8 @@ import { pathToSvgPath, segmentHandlePoint } from '../geometry/segment';
 import { findSnapPoint, constrainToAxis, snapToNothing, niceGridSpacing, snapToGrid, type SnapResult } from '../geometry/snapping';
 import type { Units } from '../machine/params';
 import type { Drawing } from '../state/useDrawingState';
+import type { CutTimeEstimate } from '../toolpath/estimate';
+import { formatDuration } from '../toolpath/estimate';
 import type { Toolpath } from '../toolpath/toolpath';
 import './Canvas.css';
 
@@ -21,6 +23,7 @@ type CanvasProps = {
   units: Units;
   /** Cutter-center toolpath for the drawn path, drawn as an overlay. */
   toolpath: Toolpath;
+  estimate: CutTimeEstimate;
 };
 
 /** Returns true when a key event is aimed at a form control, so global shortcuts leave it alone. */
@@ -31,7 +34,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
-export function Canvas({ drawing, sheet: sheetSize, units, toolpath }: CanvasProps) {
+export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate }: CanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<SnapResult | null>(null);
   // A pointerdown+move+up on a handle still synthesizes a 'click' on the
@@ -181,6 +184,7 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath }: CanvasPro
           {drawing.closed ? 'closed' : 'open'}
           {' · '}
           length {drawing.totalLength.toFixed(2)} {units}
+          {estimate.total > 0 && ` · est. ${formatDuration(estimate.total)}`}
         </span>
       </div>
 
