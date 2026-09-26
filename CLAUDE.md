@@ -37,10 +37,29 @@ npm run check        # lint + build + test: run before every commit
     counterclockwise); SVG path generation; path length and closure.
   - `snapping.ts`: grid spacing, endpoint/grid/axis snapping.
 - `src/machine/params.ts` holds the pure `MachineParams` model (units,
-  sheet, bit shape, feeds, spoilboard penetration): defaults, in/mm
-  conversion, field validation, and JSON (de)serialization shared by
-  localStorage and settings-file import. `BitShape` is a discriminated union
-  so a custom drawn profile can be added later.
+  sheet, bit shape, feeds, spoilboard penetration, and the v2 motion fields:
+  rapid rates, safe height, depth per pass, acceleration, junction
+  deviation): defaults, in/mm conversion, field validation, and JSON
+  (de)serialization shared by localStorage and settings-file import.
+  `parseParams` migrates version 1 by filling the motion fields with
+  defaults in the file's units; bump the version and add a migration for
+  any future shape change. `BitShape` is a discriminated union so a custom
+  drawn profile can be added later.
+- `src/toolpath/` turns the drawing into machine motion (pure, tested):
+  - `offset.ts`: cutter compensation. The **only** module that imports
+    `cavalier-contours-js` (pinned exact); never offset paths by hand.
+    Closed paths are normalized so CW/CCW drawings match, and output is
+    normalized to **climb milling** for a CW spindle (outside loops CW,
+    inside CCW). Loop closure is per loop (`closed[i]`): a
+    self-intersecting closed path can offset into open pieces.
+  - `toolpath.ts`: `computeToolpath` (offset + compensation radius +
+    warnings).
+  - `moves.ts`: the `Move` list (rapid/plunge/feed/retract) with depth
+    passes. **Z = 0 at the sheet top, negative into material**; home is
+    the sheet origin at safe height. Phase 4 animates this list.
+  - `planner.ts`: GRBL-style planner (arcs to chords, junction deviation,
+    backward/forward passes, trapezoidal profiles); `estimate.ts` buckets
+    its per-move times.
 - `src/state/useDrawingState.ts` is a React hook holding drawing state as
   immutable snapshots in a history array (undo/redo moves an index). Arc
   bowing uses a transient drag state that commits one snapshot on release.
