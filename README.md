@@ -43,13 +43,16 @@ what ships:
    of done.
 3. **Verify** automatically: `npm run check` (lint, typecheck/build, unit
    tests) runs locally, and the same steps run in CI on every PR.
-4. **Review and merge** by a human, iterating with the agent on review
+4. **Review** with Claude: the agent runs a code review on its own PR and
+   fixes or answers every finding.
+5. **Merge** by a human, iterating with the agent on any remaining review
    comments.
 
 The guardrails that make this work live in the repo: `CLAUDE.md` for
-context, Vitest unit tests for the geometry code, a GitHub Actions CI
-workflow, and a SessionStart hook (`.claude/`) that installs dependencies so
-cloud agent sessions can run the checks immediately.
+context and workflow, Vitest unit tests for the geometry code, a GitHub
+Actions CI workflow, and hooks in `.claude/`: one installs dependencies so
+cloud agent sessions can run the checks immediately, and one blocks agents
+from changing `master` directly.
 
 ## Status
 
