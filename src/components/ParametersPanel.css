@@ -166,6 +166,11 @@
   color: var(--text-h);
 }
 
+.estimate-total {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
 @media (prefers-color-scheme: dark) {
   .number-field input[aria-invalid='true'] {
     border-color: #f87171;

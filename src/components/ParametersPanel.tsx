@@ -6,6 +6,9 @@ import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import type { BitKind, BitShape, FieldKey, MachineParams, Units } from '../machine/params';
 import { displayDecimals, formatNumber, parseParams, serializeParams, validateParams } from '../machine/params';
+import type { CutTimeEstimate } from '../toolpath/estimate';
+import { formatDuration } from '../toolpath/estimate';
+import { passDepths } from '../toolpath/moves';
 import type { CutSide } from '../toolpath/offset';
 import type { Toolpath } from '../toolpath/toolpath';
 import { NumberField } from './NumberField';
@@ -15,6 +18,7 @@ type ParametersPanelProps = {
   params: MachineParams;
   update: (updater: (prev: MachineParams) => MachineParams) => void;
   toolpath: Toolpath;
+  estimate: CutTimeEstimate;
   /** Whether the drawn path is closed; picks which cut sides are offered. */
   closed: boolean;
   /** Current cut side, already valid for `closed`. */
@@ -59,6 +63,7 @@ export function ParametersPanel({
   params,
   update,
   toolpath,
+  estimate,
   closed,
   cutSide,
   onCutSideChange,
@@ -73,6 +78,8 @@ export function ParametersPanel({
   const { units } = params;
   const decimals = displayDecimals(units);
   const rate = `${units}/min`;
+  const totalDepth = params.sheet.thickness + params.spoilboardPenetration;
+  const passCount = passDepths(totalDepth, params.depthPerPass).length;
 
   /** Renders a NumberField bound to one params field via a pure setter. */
   const field = (
@@ -231,8 +238,11 @@ export function ParametersPanel({
         <p className="derived">
           Total cut depth{' '}
           <output>
-            {formatNumber(params.sheet.thickness + params.spoilboardPenetration, decimals)} {units}
+            {formatNumber(totalDepth, decimals)} {units}
           </output>
+        </p>
+        <p className="derived">
+          Passes <output>{passCount}</output>
         </p>
       </fieldset>
 
@@ -280,6 +290,40 @@ export function ParametersPanel({
             {w}
           </p>
         ))}
+      </fieldset>
+
+      <fieldset>
+        <legend>Estimate</legend>
+        {estimate.total > 0 ? (
+          <>
+            <p className="derived estimate-total">
+              Total time <output>{formatDuration(estimate.total)}</output>
+            </p>
+            <p className="derived">
+              Cutting <output>{formatDuration(estimate.cutting)}</output>
+            </p>
+            <p className="derived">
+              Plunging <output>{formatDuration(estimate.plunging)}</output>
+            </p>
+            <p className="derived">
+              Rapids &amp; retracts <output>{formatDuration(estimate.rapids + estimate.retracts)}</output>
+            </p>
+            <p className="derived" title="Time lost to acceleration and corner slowdowns; already included above">
+              incl. accel &amp; corner loss <output>{formatDuration(estimate.cornerLoss)}</output>
+            </p>
+            <p className="derived">
+              Passes <output>{estimate.passes}</output>
+            </p>
+            <p className="derived">
+              Cut length{' '}
+              <output>
+                {formatNumber(estimate.cutLength, 2)} {units}
+              </output>
+            </p>
+          </>
+        ) : (
+          <p className="derived">Draw a path to estimate the cut time.</p>
+        )}
       </fieldset>
 
       <fieldset>
