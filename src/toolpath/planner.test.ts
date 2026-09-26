@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { MachineParams } from '../machine/params';
 import { DEFAULT_PARAMS } from '../machine/params';
 import type { Move, Point3 } from './moves';
-import { arcChordCount, blockTime, junctionSpeed, linearize, planTime } from './planner';
+import { arcChordCount, blockTime, junctionSpeed, linearize, planBlocks, planTime } from './planner';
 
 /** Inch params with feed 600 in/min (10 in/s) and acceleration 10 in/s². */
 const params = (overrides: Partial<MachineParams> = {}): MachineParams => ({
@@ -66,8 +66,9 @@ describe('planTime: straight lines', () => {
 
 describe('junctionSpeed', () => {
   it('matches the GRBL formula at a 90° corner', () => {
-    // cosθ = 0, so s = sqrt(0.5) and v² = 10 · 0.01 · s / (1 − s) ≈ 0.2414.
-    expect(junctionSpeed(p(1, 0), p(0, 1), 10, 0.01)).toBeCloseTo(Math.sqrt(0.24142135623730953), 12);
+    // cosθ = 0, so s = sqrt(0.5) and v² = a · deviation · s / (1 − s).
+    const s = Math.SQRT1_2;
+    expect(junctionSpeed(p(1, 0), p(0, 1), 10, 0.01)).toBeCloseTo(Math.sqrt((10 * 0.01 * s) / (1 - s)), 12);
   });
 
   it('is 0 for a reversal and unlimited straight ahead', () => {
@@ -107,5 +108,33 @@ describe('arcs', () => {
     const tight = planTime([semicircle(1)], slow).total;
     const wide = planTime([feed(p(2, 0), p(0, 2), Math.tan(Math.PI / 8))], slow).total;
     expect(tight).toBeGreaterThan(wide);
+  });
+});
+
+describe('planBlocks', () => {
+  const corner = [feed(p(0, 0), p(5, 0)), feed(p(5, 0), p(5, 3), 0.3), { kind: 'rapid', from: p(5, 3), to: p(5, 3, 1) }] as Move[];
+
+  it('chains blocks end to start, from rest to rest', () => {
+    const blocks = planBlocks(corner, params());
+    expect(blocks[0].from).toEqual(p(0, 0));
+    expect(blocks[0].vEntry).toBe(0);
+    expect(blocks[blocks.length - 1].vExit).toBe(0);
+    for (let i = 1; i < blocks.length; i++) {
+      const prev = blocks[i - 1];
+      expect(prev.vExit).toBe(blocks[i].vEntry);
+      expect(prev.from.x + prev.u.x * prev.length).toBeCloseTo(blocks[i].from.x, 12);
+      expect(prev.from.y + prev.u.y * prev.length).toBeCloseTo(blocks[i].from.y, 12);
+      expect(prev.from.z + prev.u.z * prev.length).toBeCloseTo(blocks[i].from.z, 12);
+    }
+  });
+
+  it('keeps every speed within the nominal speeds and times blocks like blockTime', () => {
+    const blocks = planBlocks(corner, params());
+    for (const b of blocks) {
+      expect(b.vEntry).toBeLessThanOrEqual(b.vNom);
+      expect(b.vExit).toBeLessThanOrEqual(b.vNom);
+      expect(b.time).toBe(blockTime(b.length, b.vEntry, b.vExit, b.vNom, params().acceleration));
+    }
+    expect(blocks.reduce((sum, b) => sum + b.time, 0)).toBe(planTime(corner, params()).total);
   });
 });

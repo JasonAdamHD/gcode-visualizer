@@ -19,6 +19,8 @@ export const ARC_TOLERANCE_MM = 0.002;
 export type Block = {
   /** Index of the move this block belongs to. */
   move: number;
+  /** Start point of the block. */
+  from: Point3;
   length: number;
   /** Unit direction vector. */
   u: Point3;
@@ -95,7 +97,7 @@ export function linearize(moves: Move[], params: MachineParams): Block[] {
       const length = Math.hypot(d.x, d.y, d.z);
       if (length > EPS) {
         const u = { x: d.x / length, y: d.y / length, z: d.z / length };
-        blocks.push({ move: index, length, u, vNom: nominalSpeed(move.kind, u, params) });
+        blocks.push({ move: index, from, length, u, vNom: nominalSpeed(move.kind, u, params) });
       }
       from = to;
     }
@@ -134,14 +136,22 @@ export function blockTime(length: number, v0: number, v1: number, vmax: number, 
   return (vp - v0) / a + (vp - v1) / a;
 }
 
+/** A block after planning: its entry and exit speeds (units/s) and its time (s). */
+export type PlannedBlock = Block & {
+  vEntry: number;
+  vExit: number;
+  time: number;
+};
+
 /**
- * Plans `moves` the way GRBL does and returns the time of each move and the
- * total. The machine starts and ends at rest; between blocks the speed is
- * capped by the junction speed and both blocks' nominal speeds, then a
- * backward pass (`v_entry² ≤ v_exit² + 2aL`) and a forward pass
+ * Plans `moves` the way GRBL does and returns every straight block with the
+ * speeds it enters and leaves at and the time it takes. The machine starts
+ * and ends at rest; between blocks the speed is capped by the junction speed
+ * and both blocks' nominal speeds, then a backward pass
+ * (`v_entry² ≤ v_exit² + 2aL`) and a forward pass
  * (`v_exit² ≤ v_entry² + 2aL`) keep every change within the acceleration.
  */
-export function planTime(moves: Move[], params: MachineParams): PlanResult {
+export function planBlocks(moves: Move[], params: MachineParams): PlannedBlock[] {
   const a = params.acceleration;
   const blocks = linearize(moves, params);
   const n = blocks.length;
@@ -162,14 +172,23 @@ export function planTime(moves: Move[], params: MachineParams): PlanResult {
     entry[i + 1] = Math.min(entry[i + 1], Math.sqrt(entry[i] ** 2 + 2 * a * blocks[i].length));
   }
 
+  return blocks.map((b, i) => ({
+    ...b,
+    vEntry: entry[i],
+    vExit: entry[i + 1],
+    time: blockTime(b.length, entry[i], entry[i + 1], b.vNom, a),
+  }));
+}
+
+/** Plans `moves` with `planBlocks` and returns the time of each move and the total. */
+export function planTime(moves: Move[], params: MachineParams): PlanResult {
   const moveTimes = new Array<number>(moves.length).fill(0);
   const nominalTimes = new Array<number>(moves.length).fill(0);
   let total = 0;
-  blocks.forEach((b, i) => {
-    const t = blockTime(b.length, entry[i], entry[i + 1], b.vNom, a);
-    moveTimes[b.move] += t;
+  for (const b of planBlocks(moves, params)) {
+    moveTimes[b.move] += b.time;
     nominalTimes[b.move] += b.length / b.vNom;
-    total += t;
-  });
+    total += b.time;
+  }
   return { moveTimes, nominalTimes, total };
 }
