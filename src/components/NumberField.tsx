@@ -33,10 +33,11 @@ export function NumberField({ label, value, suffix, decimals, validate, onCommit
 
   // Adjust state during render when the committed value changes externally.
   // A value we just committed from this draft already matches it, so leave
-  // the user's text (e.g. "1.50") untouched in that case.
+  // the user's text (e.g. "1.50") untouched in that case. An empty draft
+  // never matches (Number('') is 0, which would mask a committed 0).
   if (value !== syncedValue) {
     setSyncedValue(value);
-    if (Number(draft) !== value) {
+    if (draft.trim() === '' || Number(draft) !== value) {
       setDraft(formatNumber(value, decimals));
       setError(undefined);
     }

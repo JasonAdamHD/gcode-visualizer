@@ -77,7 +77,8 @@ export function ParametersPanel({
     a.href = url;
     a.download = EXPORT_FILENAME;
     a.click();
-    URL.revokeObjectURL(url);
+    // Some browsers resolve the blob URL asynchronously; revoke after the download starts.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
     setFileMessage(null);
   };
 
