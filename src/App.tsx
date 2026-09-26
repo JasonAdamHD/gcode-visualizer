@@ -63,10 +63,8 @@ function App() {
     () => computeToolpath(drawing.segments, drawing.closed, cutSide, params),
     [drawing.segments, drawing.closed, cutSide, params]
   );
-  const estimate = useMemo(
-    () => estimateCutTime(buildMoves(toolpath.loops, toolpath.closed, params), params),
-    [toolpath, params]
-  );
+  const moves = useMemo(() => buildMoves(toolpath.loops, toolpath.closed, params), [toolpath, params]);
+  const estimate = useMemo(() => estimateCutTime(moves, params), [moves, params]);
 
   return (
     <div className="app">
