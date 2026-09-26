@@ -89,6 +89,19 @@ export function convertParams(params: MachineParams, to: Units): MachineParams {
   };
 }
 
+/** Decimal places used to display lengths and rates: 4 for inches, 2 for millimeters. */
+export function displayDecimals(units: Units): number {
+  return units === 'in' ? 4 : 2;
+}
+
+/**
+ * Rounds for display only and trims trailing zeros, e.g. (0.25, 4) -> "0.25".
+ * Stored values are never rounded.
+ */
+export function formatNumber(value: number, decimals: number): string {
+  return String(Number(value.toFixed(decimals)));
+}
+
 const isNum = (v: number) => typeof v === 'number' && Number.isFinite(v);
 
 /**

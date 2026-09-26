@@ -1,0 +1,164 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+.params-panel {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.params-panel.collapsed {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding: 10px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.params-panel button,
+.params-panel select,
+.params-panel input {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+}
+
+.params-panel button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.params-panel button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.params-panel fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.params-panel legend {
+  padding: 0 4px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.segmented {
+  display: flex;
+}
+
+.segmented button {
+  flex: 1;
+  border-radius: 0;
+}
+
+.segmented button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.segmented button:last-child {
+  border-radius: 0 6px 6px 0;
+  border-left: none;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.number-field {
+  display: grid;
+  grid-template-columns: 1fr 130px;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+}
+
+.number-field-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.number-field input,
+.number-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.number-field input[aria-invalid='true'] {
+  border-color: #d93a3a;
+}
+
+.number-field .suffix {
+  flex: none;
+  min-width: 3.2em;
+  color: var(--text);
+}
+
+.field-error {
+  grid-column: 1 / -1;
+  justify-self: end;
+  color: #d93a3a;
+  font-size: 12px;
+}
+
+.derived {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.derived output {
+  color: var(--text-h);
+}
+
+@media (prefers-color-scheme: dark) {
+  .number-field input[aria-invalid='true'] {
+    border-color: #f87171;
+  }
+
+  .field-error {
+    color: #f87171;
+  }
+}
+
+@media (max-width: 800px) {
+  .params-panel {
+    flex: none;
+    overflow-y: visible;
+  }
+}

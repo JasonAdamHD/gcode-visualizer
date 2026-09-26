@@ -7,7 +7,15 @@
   flex-direction: column;
   gap: 12px;
   flex: 1;
+  min-width: 0;
   min-height: 0;
+}
+
+@media (max-width: 800px) {
+  .canvas-workspace {
+    flex: none;
+    height: 75svh;
+  }
 }
 
 .toolbar {

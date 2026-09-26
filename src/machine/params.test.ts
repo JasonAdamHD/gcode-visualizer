@@ -8,6 +8,8 @@ import {
   DEFAULT_PARAMS,
   MM_PER_INCH,
   convertParams,
+  displayDecimals,
+  formatNumber,
   parseParams,
   serializeParams,
   unitFactor,
@@ -62,6 +64,15 @@ describe('convertParams', () => {
     ];
     flat(back).forEach((v, i) => expect(Math.abs(v - flat(vbit)[i])).toBeLessThan(1e-9));
     expect(back.units).toBe('in');
+  });
+});
+
+describe('formatNumber / displayDecimals', () => {
+  it('rounds to the unit precision and trims trailing zeros', () => {
+    expect(formatNumber(0.25, displayDecimals('in'))).toBe('0.25');
+    expect(formatNumber(1 / 3, displayDecimals('in'))).toBe('0.3333');
+    expect(formatNumber(2438.4000000001, displayDecimals('mm'))).toBe('2438.4');
+    expect(formatNumber(96, displayDecimals('in'))).toBe('96');
   });
 });
 

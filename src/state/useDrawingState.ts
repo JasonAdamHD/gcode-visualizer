@@ -152,3 +152,6 @@ export function useDrawingState() {
     totalLength,
   };
 }
+
+/** The drawing API returned by useDrawingState, as passed to components. */
+export type Drawing = ReturnType<typeof useDrawingState>;
