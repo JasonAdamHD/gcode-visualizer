@@ -136,6 +136,18 @@
   font-size: 12px;
 }
 
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.file-message {
+  margin: 0;
+  justify-self: auto;
+  overflow-wrap: anywhere;
+}
+
 .derived {
   display: flex;
   justify-content: space-between;

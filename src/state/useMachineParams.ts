@@ -47,10 +47,8 @@ export function useMachineParams() {
   /** Switches units, converting every length and rate so the physical job is unchanged. */
   const setUnits = useCallback((units: Units) => setParams((prev) => convertParams(prev, units)), []);
 
-  /** Replaces all params, e.g. from an imported settings file. */
+  /** Replaces all params, e.g. from an imported settings file or a reset to DEFAULT_PARAMS. */
   const replace = useCallback((next: MachineParams) => setParams(next), []);
 
-  const resetToDefaults = useCallback(() => setParams(DEFAULT_PARAMS), []);
-
-  return { params, update, setUnits, replace, resetToDefaults };
+  return { params, update, setUnits, replace };
 }

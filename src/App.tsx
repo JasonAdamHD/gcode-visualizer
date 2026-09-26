@@ -5,8 +5,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Canvas } from './components/Canvas';
 import { ParametersPanel } from './components/ParametersPanel';
-import type { Units } from './machine/params';
-import { unitFactor } from './machine/params';
+import type { MachineParams, Units } from './machine/params';
+import { DEFAULT_PARAMS, unitFactor } from './machine/params';
 import { useDrawingState } from './state/useDrawingState';
 import { useMachineParams } from './state/useMachineParams';
 
@@ -22,7 +22,7 @@ function loadPanelOpen(): boolean {
 
 function App() {
   const drawing = useDrawingState();
-  const { params, update, setUnits } = useMachineParams();
+  const { params, update, setUnits, replace } = useMachineParams();
   const [panelOpen, setPanelOpen] = useState(loadPanelOpen);
 
   useEffect(() => {
@@ -33,8 +33,9 @@ function App() {
     }
   }, [panelOpen]);
 
-  // Units live outside drawing history, so a unit switch rescales every
-  // drawing snapshot alongside the params to keep the physical part unchanged.
+  // Units live outside drawing history, so any change of units (toggle,
+  // import, reset) rescales every drawing snapshot alongside the params to
+  // keep the physical part unchanged.
   const { rescale } = drawing;
   const applyUnits = useCallback(
     (next: Units) => {
@@ -42,6 +43,14 @@ function App() {
       setUnits(next);
     },
     [params.units, rescale, setUnits]
+  );
+
+  const applyParams = useCallback(
+    (next: MachineParams) => {
+      rescale(unitFactor(params.units, next.units));
+      replace(next);
+    },
+    [params.units, rescale, replace]
   );
 
   return (
@@ -55,6 +64,8 @@ function App() {
           params={params}
           update={update}
           onUnitsChange={applyUnits}
+          onImport={applyParams}
+          onReset={() => applyParams(DEFAULT_PARAMS)}
           open={panelOpen}
           onToggle={() => setPanelOpen((o) => !o)}
         />

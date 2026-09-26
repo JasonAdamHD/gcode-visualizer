@@ -2,8 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import type { BitKind, BitShape, FieldKey, MachineParams, Units } from '../machine/params';
-import { displayDecimals, formatNumber, validateParams } from '../machine/params';
+import { displayDecimals, formatNumber, parseParams, serializeParams, validateParams } from '../machine/params';
 import { NumberField } from './NumberField';
 import './ParametersPanel.css';
 
@@ -12,6 +14,9 @@ type ParametersPanelProps = {
   update: (updater: (prev: MachineParams) => MachineParams) => void;
   /** Switches units; the caller also rescales the drawing. */
   onUnitsChange: (units: Units) => void;
+  /** Applies imported params; the caller also rescales the drawing if units differ. */
+  onImport: (params: MachineParams) => void;
+  onReset: () => void;
   open: boolean;
   onToggle: () => void;
 };
@@ -23,6 +28,7 @@ const BIT_LABELS: Record<BitKind, string> = {
 };
 
 const DEFAULT_VBIT_ANGLE = 90;
+const EXPORT_FILENAME = 'cnc-params.json';
 
 function shapeFor(kind: BitKind, current: BitShape): BitShape {
   if (kind === current.kind) return current;
@@ -30,7 +36,17 @@ function shapeFor(kind: BitKind, current: BitShape): BitShape {
 }
 
 /** Sidebar for editing machine/job parameters. */
-export function ParametersPanel({ params, update, onUnitsChange, open, onToggle }: ParametersPanelProps) {
+export function ParametersPanel({
+  params,
+  update,
+  onUnitsChange,
+  onImport,
+  onReset,
+  open,
+  onToggle,
+}: ParametersPanelProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileMessage, setFileMessage] = useState<{ error: boolean; text: string } | null>(null);
   const { units } = params;
   const decimals = displayDecimals(units);
   const rate = `${units}/min`;
@@ -53,6 +69,45 @@ export function ParametersPanel({ params, update, onUnitsChange, open, onToggle 
       onCommit={(v) => update((p) => set(p, v))}
     />
   );
+
+  const handleExport = () => {
+    const blob = new Blob([serializeParams(params)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = EXPORT_FILENAME;
+    a.click();
+    URL.revokeObjectURL(url);
+    setFileMessage(null);
+  };
+
+  // Parsing stays in the browser; a failed import changes nothing.
+  const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    input.value = ''; // allow re-importing the same file
+    if (!file) return;
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      setFileMessage({ error: true, text: `Couldn't read ${file.name}` });
+      return;
+    }
+    const result = parseParams(text);
+    if (!result.ok) {
+      setFileMessage({ error: true, text: `Couldn't import ${file.name}: ${result.error}` });
+      return;
+    }
+    onImport(result.params);
+    setFileMessage({ error: false, text: `Imported ${file.name}` });
+  };
+
+  const handleReset = () => {
+    if (!window.confirm('Reset all parameters to their defaults?')) return;
+    onReset();
+    setFileMessage(null);
+  };
 
   if (!open) {
     return (
@@ -152,6 +207,33 @@ export function ParametersPanel({ params, update, onUnitsChange, open, onToggle 
             {formatNumber(params.sheet.thickness + params.spoilboardPenetration, decimals)} {units}
           </output>
         </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Settings file</legend>
+        <div className="button-row">
+          <button type="button" onClick={handleExport}>
+            Export
+          </button>
+          <button type="button" onClick={() => fileInputRef.current?.click()}>
+            Import
+          </button>
+          <button type="button" onClick={handleReset}>
+            Reset to defaults
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={handleImport}
+        />
+        {fileMessage && (
+          <p className={fileMessage.error ? 'file-message field-error' : 'file-message'} role="status">
+            {fileMessage.text}
+          </p>
+        )}
       </fieldset>
     </aside>
   );
