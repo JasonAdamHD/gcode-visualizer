@@ -102,6 +102,8 @@ export type TimelineSample = {
   position: Point3;
   /** Index of the move in progress (the first move before the start, the last after the end); -1 with no moves. */
   moveIndex: number;
+  /** Index of the planned block in progress, clamped like `moveIndex`; -1 with no blocks. */
+  block: number;
   kind: Move['kind'] | null;
   /** Current speed in units/s. */
   speed: number;
@@ -118,11 +120,11 @@ export function sampleTimeline(timeline: Timeline, t: number): TimelineSample {
   const n = blocks.length;
   if (n === 0) {
     const position = moves.length > 0 ? moves[0].from : timeline.home;
-    return { position, moveIndex: moves.length > 0 ? 0 : -1, kind: moves[0]?.kind ?? null, speed: 0 };
+    return { position, moveIndex: moves.length > 0 ? 0 : -1, block: -1, kind: moves[0]?.kind ?? null, speed: 0 };
   }
   if (t >= total) {
     const last = blocks[n - 1].move;
-    return { position: moves[last].to, moveIndex: last, kind: moves[last].kind, speed: 0 };
+    return { position: moves[last].to, moveIndex: last, block: n - 1, kind: moves[last].kind, speed: 0 };
   }
 
   // Largest i with blockStart[i] <= t.
@@ -138,6 +140,7 @@ export function sampleTimeline(timeline: Timeline, t: number): TimelineSample {
   return {
     position: { x: b.from.x + b.u.x * distance, y: b.from.y + b.u.y * distance, z: b.from.z + b.u.z * distance },
     moveIndex: b.move,
+    block: lo,
     kind: moves[b.move].kind,
     speed,
   };

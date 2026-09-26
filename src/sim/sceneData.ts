@@ -42,6 +42,21 @@ export function moveLineBuffers(moves: Move[], params: MachineParams): MoveLineB
   };
 }
 
+/**
+ * All straight pieces of `moves` in playback order as one line-segment
+ * buffer, `[x0, y0, z0, x1, y1, z1, …]`. Piece `i` is timeline block `i`
+ * (both come from `linearize`), so drawing the first `i` pieces shows the
+ * path traversed before block `i`.
+ */
+export function pathBuffer(moves: Move[], params: MachineParams): Float32Array {
+  const blocks = linearize(moves, params);
+  const out = new Float32Array(blocks.length * 6);
+  blocks.forEach(({ from, u, length }, i) => {
+    out.set([from.x, from.y, from.z, from.x + u.x * length, from.y + u.y * length, from.z + u.z * length], i * 6);
+  });
+  return out;
+}
+
 /** Quarter-circle steps used to outline a ball-nose tip. */
 const BALL_STEPS = 12;
 

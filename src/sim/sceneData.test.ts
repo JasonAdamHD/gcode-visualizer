@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS } from '../machine/params';
 import type { Move, Point3 } from '../toolpath/moves';
-import { bitProfile, moveLineBuffers } from './sceneData';
+import { buildTimeline } from '../toolpath/timeline';
+import { bitProfile, moveLineBuffers, pathBuffer } from './sceneData';
 
 const p = (x: number, y: number, z: number): Point3 => ({ x, y, z });
 
@@ -56,6 +57,31 @@ describe('moveLineBuffers', () => {
   it('is empty for no moves', () => {
     const empty = moveLineBuffers([], DEFAULT_PARAMS);
     for (const buf of Object.values(empty)) expect(buf).toHaveLength(0);
+  });
+});
+
+describe('pathBuffer', () => {
+  const moves: Move[] = [
+    { kind: 'rapid', from: p(0, 0, 1), to: p(2, 0, 1) },
+    { kind: 'plunge', from: p(2, 0, 1), to: p(2, 0, -0.5) },
+    { kind: 'feed', from: p(2, 0, -0.5), to: p(0, 0, -0.5), bulge: 1 },
+    { kind: 'retract', from: p(0, 0, -0.5), to: p(0, 0, 1) },
+  ];
+
+  it('has one piece per timeline block, starting at each block start', () => {
+    const buf = pathBuffer(moves, DEFAULT_PARAMS);
+    const { blocks } = buildTimeline(moves, DEFAULT_PARAMS);
+    expect(buf).toHaveLength(blocks.length * 6);
+    blocks.forEach((b, i) => {
+      expect(buf[i * 6]).toBeCloseTo(b.from.x, 6);
+      expect(buf[i * 6 + 1]).toBeCloseTo(b.from.y, 6);
+      expect(buf[i * 6 + 2]).toBeCloseTo(b.from.z, 6);
+    });
+  });
+
+  it('holds the same pieces as the per-kind buffers combined', () => {
+    const total = Object.values(moveLineBuffers(moves, DEFAULT_PARAMS)).reduce((sum, b) => sum + b.length, 0);
+    expect(pathBuffer(moves, DEFAULT_PARAMS)).toHaveLength(total);
   });
 });
 
