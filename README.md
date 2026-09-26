@@ -22,8 +22,8 @@ and frontend ability.
    rate.
 4. **Visualize** the cut in 3D and simulate the bit moving along the
    toolpath.
-5. **Import** a G-code file (from any CAM/post-processor, including customer
-   files) and step through it move-by-move, with the current line
+5. **Import** a G-code file (starting with basic, standard G-code; see
+   Phase 5 below) and step through it move-by-move, with the current line
    highlighted on the canvas/3D view, rapid vs. feed moves visually
    distinct, and flags for likely problems (out-of-bounds moves, suspicious
    Z depth, unresolved arcs) — built for debugging real files, not just
@@ -68,7 +68,13 @@ from changing `master` directly.
       and a cut-time estimate from a GRBL-style planner (rapids, plunges,
       retracts, acceleration and corner slowdowns)
 - [ ] Phase 4 — 3D visualization
-- [ ] Phase 5 — G-code import + debugging (parser, step-through, error flags)
+- [ ] Phase 5 — G-code import + debugging (parser, step-through, error flags).
+      The initial import supports basic, standard G-code syntax only:
+      G0/G1/G2/G3 (arcs by I/J or R, XY plane), G20/G21 units,
+      G90/G91 positioning, F feed rates, and comments; other words are
+      reported rather than silently ignored. Controller-specific dialects
+      (e.g. Biesse) are planned later, behind a per-controller dialect
+      layer on top of the same parser
 - [ ] Phase 6 — Drawing canvas enhancements (pocket clearing, tabs,
       lead-in/lead-out, manual repair of an imported path)
 - [ ] Phase 7 — Parameters panel enhancements (tool library, multiple passes,
@@ -136,5 +142,6 @@ however you want.
   /state         # Drawing state (undo/redo), persisted machine params
 /.claude         # Claude Code settings and SessionStart hook
 /.github         # CI workflow
+/docs/plans      # Working plans handed to implementing agents
 CLAUDE.md        # Guidance for coding agents
 ```
