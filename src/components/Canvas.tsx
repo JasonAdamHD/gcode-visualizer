@@ -7,21 +7,34 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Point } from '../geometry/segment';
 import { pathToSvgPath, segmentHandlePoint } from '../geometry/segment';
 import { findSnapPoint, constrainToAxis, snapToNothing, niceGridSpacing, snapToGrid, type SnapResult } from '../geometry/snapping';
-import { useDrawingState } from '../state/useDrawingState';
+import type { Units } from '../machine/params';
+import type { Drawing } from '../state/useDrawingState';
 import './Canvas.css';
 
 type SheetSize = { x: number; y: number };
 
-export function Canvas() {
-  const [sheetSize, setSheetSize] = useState<SheetSize>({ x: 96, y: 48 });
+type CanvasProps = {
+  drawing: Drawing;
+  /** Sheet extents in world units (`units`), origin at the lower-left corner. */
+  sheet: SheetSize;
+  units: Units;
+};
+
+/** Returns true when a key event is aimed at a form control, so global shortcuts leave it alone. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+  );
+}
+
+export function Canvas({ drawing, sheet: sheetSize, units }: CanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<SnapResult | null>(null);
   // A pointerdown+move+up on a handle still synthesizes a 'click' on the
   // svg (the nearest common ancestor of the down/up targets) once released;
   // this suppresses that stray click so it doesn't place a stray point.
   const suppressNextClickRef = useRef(false);
-
-  const drawing = useDrawingState();
 
   const gridSpacing = useMemo(() => niceGridSpacing(sheetSize.x, sheetSize.y), [sheetSize]);
   const tolerance = gridSpacing * 0.35;
@@ -95,6 +108,7 @@ export function Canvas() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return;
       const key = e.key.toLowerCase();
       if ((e.ctrlKey || e.metaKey) && key === 'z' && e.shiftKey) {
         e.preventDefault();
@@ -139,25 +153,6 @@ export function Canvas() {
   return (
     <div className="canvas-workspace">
       <div className="toolbar">
-        <label>
-          Sheet X
-          <input
-            type="number"
-            min={1}
-            value={sheetSize.x}
-            onChange={(e) => setSheetSize((s) => ({ ...s, x: Math.max(1, Number(e.target.value) || 1) }))}
-          />
-        </label>
-        <label>
-          Sheet Y
-          <input
-            type="number"
-            min={1}
-            value={sheetSize.y}
-            onChange={(e) => setSheetSize((s) => ({ ...s, y: Math.max(1, Number(e.target.value) || 1) }))}
-          />
-        </label>
-        <span className="divider" />
         <button type="button" onClick={drawing.undo} disabled={!drawing.canUndo}>
           Undo
         </button>
@@ -179,7 +174,7 @@ export function Canvas() {
           {' · '}
           {drawing.closed ? 'closed' : 'open'}
           {' · '}
-          length {drawing.totalLength.toFixed(2)}
+          length {drawing.totalLength.toFixed(2)} {units}
         </span>
       </div>
 

@@ -13,6 +13,8 @@ import {
   pathToSvgPath,
   pointsEqual,
   sagittaPoint,
+  scalePath,
+  scalePoint,
   segmentHandlePoint,
   segmentPathData,
 } from './segment';
@@ -151,5 +153,29 @@ describe('pathLength', () => {
 
   it('uses arc length for bulged segments', () => {
     expect(pathLength([line({ x: 0, y: 0 }, { x: 10, y: 0 }, 1)])).toBeCloseTo(5 * Math.PI);
+  });
+});
+
+describe('scalePoint / scalePath', () => {
+  it('scales a point about the origin', () => {
+    const p = scalePoint({ x: 2, y: -3 }, 25.4);
+    expect(p.x).toBeCloseTo(50.8);
+    expect(p.y).toBeCloseTo(-76.2);
+  });
+
+  it('scales lengths by the factor and keeps arc bulges', () => {
+    const path: Path = [...square.slice(0, 3), line({ x: 0, y: 10 }, { x: 0, y: 0 }, 0.5)];
+    const scaled = scalePath(path, 25.4);
+    expect(pathLength(scaled)).toBeCloseTo(pathLength(path) * 25.4);
+    expect(scaled.map((s) => s.bulge)).toEqual(path.map((s) => s.bulge));
+    expect(isPathClosed(scaled)).toBe(true);
+  });
+
+  it('round-trips through a factor and its inverse', () => {
+    const back = scalePath(scalePath(square, 25.4), 1 / 25.4);
+    back.forEach((seg, i) => {
+      expect(pointsEqual(seg.start, square[i].start, 1e-9)).toBe(true);
+      expect(pointsEqual(seg.end, square[i].end, 1e-9)).toBe(true);
+    });
   });
 });

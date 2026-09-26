@@ -4,7 +4,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import type { Path, Point, Segment } from '../geometry/segment';
-import { bulgeFromDrag, isPathClosed, pathLength, pointsEqual } from '../geometry/segment';
+import { bulgeFromDrag, isPathClosed, pathLength, pointsEqual, scalePath, scalePoint } from '../geometry/segment';
 
 type DrawingState = {
   segments: Path;
@@ -73,6 +73,23 @@ export function useDrawingState() {
     [history.length]
   );
 
+  /**
+   * Uniformly scales every snapshot in history (e.g. by 25.4 on an in -> mm
+   * switch) without adding an entry or moving the index. Units live outside
+   * drawing history, so an undoable rescale would let undo put inch geometry
+   * on a millimeter sheet. Cancels any in-progress arc drag.
+   */
+  const rescale = useCallback((factor: number) => {
+    if (factor === 1) return;
+    setHistory((prev) =>
+      prev.map((snap) => ({
+        segments: scalePath(snap.segments, factor),
+        draftStart: snap.draftStart ? scalePoint(snap.draftStart, factor) : null,
+      }))
+    );
+    setDrag(null);
+  }, []);
+
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
 
@@ -123,6 +140,7 @@ export function useDrawingState() {
     reset,
     undo,
     redo,
+    rescale,
     canUndo,
     canRedo,
     beginDrag,
@@ -134,3 +152,6 @@ export function useDrawingState() {
     totalLength,
   };
 }
+
+/** The drawing API returned by useDrawingState, as passed to components. */
+export type Drawing = ReturnType<typeof useDrawingState>;
