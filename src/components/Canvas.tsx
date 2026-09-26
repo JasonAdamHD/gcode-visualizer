@@ -149,7 +149,7 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath }: CanvasPro
   const snapRadius = gridSpacing * 0.18;
 
   // Closed loops get a Z so the round join also applies at the start point.
-  const toolpathData = toolpath.loops.map((loop) => pathToSvgPath(loop) + (toolpath.closed ? ' Z' : ''));
+  const toolpathData = toolpath.loops.map((loop, i) => pathToSvgPath(loop) + (toolpath.closed[i] ? ' Z' : ''));
 
   const previewLine =
     drawing.draftStart && hover && !drawing.isDragging && !drawing.closed

@@ -191,7 +191,25 @@ describe('offsetPath', () => {
   });
 
   it('returns the path unchanged for an on-line cut', () => {
-    expect(offsetPath(squareCcw, true, 'on', r).loops).toEqual([squareCcw]);
+    expect(offsetPath(squareCcw, true, 'on', r)).toEqual({ loops: [squareCcw], closed: [true] });
+  });
+
+  it('reports per-loop closure when a self-intersecting closed path offsets into open pieces', () => {
+    const bowtie = polygon([
+      [0, 0],
+      [2, 2],
+      [2, 0],
+      [0, 2],
+    ]);
+    const { loops, closed } = offsetPath(bowtie, true, 'outside', r);
+    expect(closed).toHaveLength(loops.length);
+    expect(closed).toContain(false);
+    for (const [i, loop] of loops.entries()) {
+      const joined = distance(loop[0].start, loop[loop.length - 1].end) < 1e-9;
+      expect(joined).toBe(closed[i]);
+    }
+    const bounds = toolpathBounds(loops, closed);
+    expect(bounds).not.toBeNull();
   });
 });
 
@@ -228,7 +246,7 @@ describe('compensationRadius', () => {
 describe('toolpath bounds', () => {
   it('includes arc bulges in the bounds', () => {
     const circle: Path = [seg({ x: 1, y: 0 }, { x: -1, y: 0 }, 1), seg({ x: -1, y: 0 }, { x: 1, y: 0 }, 1)];
-    const b = toolpathBounds([circle], true)!;
+    const b = toolpathBounds([circle], [true])!;
     expect(b.minX).toBeCloseTo(-1, 9);
     expect(b.maxX).toBeCloseTo(1, 9);
     expect(b.minY).toBeCloseTo(-1, 9);
@@ -254,7 +272,7 @@ describe('computeToolpath', () => {
   it('offsets by the compensation radius and totals the length', () => {
     const tp = computeToolpath(squareCcw, true, 'outside', params);
     expect(tp.radius).toBe(0.125);
-    expect(tp.closed).toBe(true);
+    expect(tp.closed).toEqual([true]);
     expect(tp.length).toBeCloseTo(8 + 2 * Math.PI * 0.125, 9);
     expect(tp.warnings).toEqual([]);
   });

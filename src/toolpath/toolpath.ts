@@ -11,8 +11,11 @@ import { compensationRadius, offsetPath, sheetBoundsWarning, toolpathBounds } fr
 export type Toolpath = {
   /** Cutter-center loops, in world units (Y-up), climb-milling direction. */
   loops: Path[];
-  /** Whether every loop is closed (the loops share the drawn path's closure). */
-  closed: boolean;
+  /**
+   * Per loop, whether it is closed. Usually the drawn path's closure, but a
+   * self-intersecting closed path can offset into open pieces.
+   */
+  closed: boolean[];
   /** Compensation radius used for the offset, in world units. */
   radius: number;
   /** Total length of all loops, in world units. */
@@ -33,14 +36,14 @@ export function computeToolpath(
   params: MachineParams
 ): Toolpath {
   const radius = compensationRadius(params);
-  if (segments.length < 1) return { loops: [], closed, radius, length: 0, warnings: [] };
+  if (segments.length < 1) return { loops: [], closed: [], radius, length: 0, warnings: [] };
 
-  const { loops, warning } = offsetPath(segments, closed, cutSide, radius);
+  const { loops, closed: loopClosed, warning } = offsetPath(segments, closed, cutSide, radius);
   const warnings: string[] = [];
   if (warning) warnings.push(warning);
-  const boundsWarning = sheetBoundsWarning(toolpathBounds(loops, closed), params.sheet);
+  const boundsWarning = sheetBoundsWarning(toolpathBounds(loops, loopClosed), params.sheet);
   if (boundsWarning) warnings.push(boundsWarning);
 
   const length = loops.reduce((total, loop) => total + pathLength(loop), 0);
-  return { loops, closed, radius, length, warnings };
+  return { loops, closed: loopClosed, radius, length, warnings };
 }

@@ -17,7 +17,11 @@ import type { MachineParams } from '../machine/params';
  */
 export type CutSide = 'outside' | 'inside' | 'left' | 'right' | 'on';
 
-export type OffsetResult = { loops: Path[]; warning?: string };
+/**
+ * Offset loops plus, per loop, whether it is closed. Closure is per loop
+ * because offsetting a self-intersecting closed path can yield open pieces.
+ */
+export type OffsetResult = { loops: Path[]; closed: boolean[]; warning?: string };
 
 export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
@@ -100,6 +104,8 @@ export function polylineToPath(pline: Polyline): Path {
  * first, so `outside`/`inside` don't depend on whether the user drew CW or
  * CCW; an inside offset may split into several loops or vanish (then
  * `loops` is empty and `warning` says why). `on` returns the path unchanged.
+ * A self-intersecting closed path can offset into open pieces, so check
+ * `closed[i]` rather than assuming the input's closure.
  *
  * Output direction is normalized to climb milling for a clockwise spindle:
  * the kept material is on the cutter's right, so outside profiles run CW,
@@ -108,8 +114,8 @@ export function polylineToPath(pline: Polyline): Path {
  * simulation relies on it.
  */
 export function offsetPath(path: Path, closed: boolean, side: CutSide, radius: number): OffsetResult {
-  if (path.length === 0) return { loops: [] };
-  if (side === 'on' || radius <= 0) return { loops: [path] };
+  if (path.length === 0) return { loops: [], closed: [] };
+  if (side === 'on' || radius <= 0) return { loops: [path], closed: [closed] };
 
   const pline = pathToPolyline(path, closed);
   let delta: number;
@@ -121,29 +127,37 @@ export function offsetPath(path: Path, closed: boolean, side: CutSide, radius: n
     delta = side === 'left' ? radius : -radius;
   }
 
-  const results = pline.parallelOffsetOpt(delta, { handleSelfIntersects: true });
+  const results = pline
+    .parallelOffsetOpt(delta, { handleSelfIntersects: true })
+    .filter((loop) => loop.vertexCount > 1);
   for (const loop of results) {
-    const reverse = closed
-      ? (side === 'outside') === (loop.area() > 0) // outside -> CW, inside -> CCW
-      : side === 'right';
+    let reverse: boolean;
+    if (loop.isClosed) reverse = (side === 'outside') === (loop.area() > 0); // outside -> CW, inside -> CCW
+    else if (!closed) reverse = side === 'right';
+    else reverse = false; // open piece of a self-intersecting closed path: no clear material side
     if (reverse) loop.invertDirectionMut();
   }
 
-  const loops = results.map(polylineToPath).filter((loop) => loop.length > 0);
+  const loops = results.map(polylineToPath);
+  const loopClosed = results.map((loop) => loop.isClosed);
   if (loops.length === 0) {
     return {
       loops,
+      closed: loopClosed,
       warning: side === 'inside' ? 'Bit is too large for this inside cut' : 'Offset produced no toolpath',
     };
   }
-  return { loops };
+  return { loops, closed: loopClosed };
 }
 
-/** Axis-aligned bounds of the toolpath loops, including arc bulges, or null when there are none. */
-export function toolpathBounds(loops: Path[], closed: boolean): Bounds | null {
+/**
+ * Axis-aligned bounds of the toolpath loops, including arc bulges, or null
+ * when there are none. `closed[i]` says whether loop i is closed.
+ */
+export function toolpathBounds(loops: Path[], closed: boolean[]): Bounds | null {
   let bounds: Bounds | null = null;
-  for (const loop of loops) {
-    const e = pathToPolyline(loop, closed).extents();
+  for (const [i, loop] of loops.entries()) {
+    const e = pathToPolyline(loop, closed[i]).extents();
     if (!e) continue;
     bounds = bounds
       ? {
