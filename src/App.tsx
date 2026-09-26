@@ -2,9 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Canvas } from './components/Canvas';
 import { ParametersPanel } from './components/ParametersPanel';
+import type { ViewMode } from './components/ViewToggle';
+import { ViewToggle } from './components/ViewToggle';
 import type { MachineParams, Units } from './machine/params';
 import { DEFAULT_PARAMS, unitFactor } from './machine/params';
 import { useDrawingState } from './state/useDrawingState';
@@ -14,7 +16,11 @@ import { buildMoves } from './toolpath/moves';
 import { effectiveCutSide } from './toolpath/offset';
 import { computeToolpath } from './toolpath/toolpath';
 
+// Three.js is only downloaded once the 3D view is first opened.
+const Viewer3D = lazy(() => import('./components/Viewer3D'));
+
 const PANEL_OPEN_KEY = 'cnc-visualizer.panelOpen';
+const VIEW_KEY = 'cnc-visualizer.view';
 
 function loadPanelOpen(): boolean {
   try {
@@ -24,10 +30,19 @@ function loadPanelOpen(): boolean {
   }
 }
 
+function loadView(): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_KEY) === '3d' ? '3d' : '2d';
+  } catch {
+    return '2d';
+  }
+}
+
 function App() {
   const drawing = useDrawingState();
   const { params, update, setUnits, replace } = useMachineParams();
   const [panelOpen, setPanelOpen] = useState(loadPanelOpen);
+  const [view, setView] = useState(loadView);
 
   useEffect(() => {
     try {
@@ -36,6 +51,14 @@ function App() {
       // Per-viewer convenience only; ignore storage failures.
     }
   }, [panelOpen]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      // Per-viewer convenience only; ignore storage failures.
+    }
+  }, [view]);
 
   // Units live outside drawing history, so any change of units (toggle,
   // import, reset) rescales every drawing snapshot alongside the params to
@@ -65,6 +88,9 @@ function App() {
   );
   const moves = useMemo(() => buildMoves(toolpath.loops, toolpath.closed, params), [toolpath, params]);
   const estimate = useMemo(() => estimateCutTime(moves, params), [moves, params]);
+  // The bit rests at home until playback (Phase 4, PR 3) moves it.
+  const bitPosition = useMemo(() => ({ x: 0, y: 0, z: params.safeHeight }), [params.safeHeight]);
+  const viewToggle = <ViewToggle view={view} onChange={setView} />;
 
   return (
     <div className="app">
@@ -72,7 +98,20 @@ function App() {
         <h1>CNC Toolpath Visualizer</h1>
       </header>
       <main className="app-main">
-        <Canvas drawing={drawing} sheet={params.sheet} units={params.units} toolpath={toolpath} estimate={estimate} />
+        {view === '3d' ? (
+          <Suspense fallback={<div className="canvas-workspace view-loading">Loading 3D view…</div>}>
+            <Viewer3D moves={moves} params={params} estimate={estimate} position={bitPosition} viewToggle={viewToggle} />
+          </Suspense>
+        ) : (
+          <Canvas
+            drawing={drawing}
+            sheet={params.sheet}
+            units={params.units}
+            toolpath={toolpath}
+            estimate={estimate}
+            viewToggle={viewToggle}
+          />
+        )}
         <ParametersPanel
           params={params}
           update={update}

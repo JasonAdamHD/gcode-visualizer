@@ -1,0 +1,60 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+.viewer-3d {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--canvas-bg);
+  touch-action: none;
+}
+
+.viewer-3d canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.viewer-3d-message {
+  margin: 0;
+  padding: 24px;
+  color: var(--text);
+}
+
+.toolbar .legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  margin-left: 6px;
+  border-top: 2px solid;
+}
+
+.swatch:first-child {
+  margin-left: 0;
+}
+
+.swatch-feed {
+  border-color: var(--toolpath);
+}
+
+.swatch-vertical {
+  border-color: var(--accent);
+}
+
+.swatch-rapid {
+  border-top-style: dashed;
+  border-color: var(--text);
+}
