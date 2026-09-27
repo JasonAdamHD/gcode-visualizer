@@ -79,12 +79,16 @@ from changing `master` directly.
       reported rather than silently ignored. Controller-specific dialects
       (e.g. Biesse) are planned later, behind a per-controller dialect
       layer on top of the same parser
-- [ ] Phase 6 — Drawing canvas enhancements (pocket clearing, tabs,
-      lead-in/lead-out, manual repair of an imported path)
-- [ ] Phase 7 — Parameters panel enhancements (tool library, multiple passes,
-      custom (drawn) bit profiles)
-- [ ] Phase 8 — 3D visualization enhancements (material removal, camera
+- [ ] Phase 6 — 3D visualization enhancements (material removal, camera
       controls, better playback)
+- [ ] Phase 7 — Drawing canvas enhancements (pocket clearing, tabs,
+      lead-in/lead-out, manual repair of an imported path)
+- [ ] Phase 8 — Parameters panel enhancements (tool library, multiple passes,
+      custom (drawn) bit profiles)
+- [ ] Phase 9 — Optional account, hosted on AWS: save your own programs and
+      share a deep link to a specific line; parsing stays in the browser,
+      and a file is uploaded only when you choose to save it (see
+      **Privacy and data handling**)
 
 ## Privacy and data handling
 
@@ -97,7 +101,7 @@ explicitly choose to save it.**
 - **Today:** there is no server at all. The app is entirely client-side, so
   nothing you open ever leaves your machine. No account, no upload, no
   telemetry.
-- **Planned:** an optional account for saving your *own* programs and sharing
+- **Planned (Phase 9):** an optional account for saving your *own* programs and sharing
   a deep link to a specific line with a coworker. The parser stays on the
   client even then — saving uploads the file and the results your browser
   already computed, rather than recomputing them server-side.

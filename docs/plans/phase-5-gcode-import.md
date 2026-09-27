@@ -39,11 +39,11 @@ the traversed-path highlight and `pathBuffer` are on `master`.
   G28/G53, work offsets (G54…) beyond reporting them, subprograms and
   macros.
 - Cutter compensation in the file (G41/G42): report it, do not apply it.
-- Converting an imported program into an editable drawing (Phase 6
+- Converting an imported program into an editable drawing (Phase 7
   "manual repair").
 - A Web Worker parser.
 - G-code export.
-- Pan/zoom in the 2D view (the drawing canvas has none either; Phase 8).
+- Pan/zoom in the 2D view (the drawing canvas has none either; Phase 6).
 
 ## What already exists (read these)
 

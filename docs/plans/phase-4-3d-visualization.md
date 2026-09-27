@@ -22,14 +22,14 @@ Show the job in 3D and simulate the bit moving along the toolpath:
 
 ## Out of scope (do not build)
 
-- Material removal / stock simulation (Phase 8).
+- Material removal / stock simulation (Phase 6).
 - Camera presets, fit-to-selection, section views, better playback UX such
-  as per-move stepping (Phase 8). A basic orbit camera and a "reset view"
+  as per-move stepping (Phase 6). A basic orbit camera and a "reset view"
   button **are** in scope.
 - G-code parsing (Phase 5). Design the viewer so Phase 5 can reuse it (see
   [Phase 5 compatibility](#phase-5-compatibility)), but do not add a parser.
-- Tabs, lead-ins, pockets (Phase 6); tool library, custom bit profiles
-  (Phase 7).
+- Tabs, lead-ins, pockets (Phase 7); tool library, custom bit profiles
+  (Phase 8).
 
 ## What already exists (read these)
 
