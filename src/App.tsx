@@ -135,9 +135,15 @@ function App() {
   const viewToggle = <ViewToggle view={view} onChange={setView} />;
 
   const { load } = programFile;
-  const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes('Files');
+  // Files dropped on the workspace open as G-code; the parameters panel is
+  // not a drop target (settings files are imported from its own button).
+  const hasFiles = (e: DragEvent) =>
+    e.dataTransfer.types.includes('Files') && !(e.target instanceof Element && e.target.closest('.params-panel'));
   const handleDragOver = (e: DragEvent) => {
-    if (!hasFiles(e)) return;
+    if (!hasFiles(e)) {
+      setDropping(false);
+      return;
+    }
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     setDropping(true);

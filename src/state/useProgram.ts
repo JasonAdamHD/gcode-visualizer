@@ -4,6 +4,12 @@
 
 import { useCallback, useRef, useState } from 'react';
 
+/**
+ * Largest file opened, in bytes. Far above a 10⁵-line program (a few MB);
+ * it stops an accidental drop of a huge file from freezing the tab.
+ */
+export const MAX_PROGRAM_BYTES = 50 * 1024 * 1024;
+
 /** An opened G-code file: its name and text. */
 export type ProgramSource = { name: string; text: string };
 
@@ -22,7 +28,8 @@ export type ProgramFile = {
  * The opened G-code file. It is read in the browser and kept only in
  * memory: never uploaded and never persisted (see the README's Privacy
  * section). If opens overlap, the last one requested wins; a failed open
- * leaves the current state unchanged apart from the error.
+ * leaves the current state unchanged apart from the error, as does a file
+ * over `MAX_PROGRAM_BYTES`.
  */
 export function useProgram(): ProgramFile {
   const [source, setSource] = useState<ProgramSource | null>(null);
@@ -43,7 +50,16 @@ export function useProgram(): ProgramFile {
     setError(null);
   }, []);
 
-  const load = useCallback((file: File) => void read(file.name, () => file.text()), [read]);
+  const load = useCallback(
+    (file: File) => {
+      if (file.size > MAX_PROGRAM_BYTES) {
+        setError(`${file.name} is too large to open (over ${MAX_PROGRAM_BYTES / 1024 / 1024} MB)`);
+        return;
+      }
+      void read(file.name, () => file.text());
+    },
+    [read]
+  );
 
   const loadUrl = useCallback(
     (url: string, name: string) =>
