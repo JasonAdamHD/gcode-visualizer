@@ -24,6 +24,45 @@
   color: var(--text-h);
 }
 
+.program-problems-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.program-problems-header h2 {
+  margin: 0;
+  margin-right: auto;
+}
+
+.program-problems-header label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.program-problems-header button {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  cursor: pointer;
+}
+
+.program-problems-header button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.program-problems-header button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .program-problems {
   flex: none;
   max-height: 40%;

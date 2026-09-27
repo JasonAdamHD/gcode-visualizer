@@ -20,19 +20,56 @@
   left: 0;
   right: 0;
   display: flex;
+  align-items: stretch;
+  font: 12px/20px var(--mono);
+}
+
+.source-row button {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px 0 0;
+  padding: 0;
   border: none;
   background: none;
   color: var(--text-h);
-  font: 12px/20px var(--mono);
+  font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.source-row:hover {
+.source-row .source-gutter {
+  flex: none;
+  gap: 2px;
+  padding-left: 4px;
+}
+
+.source-row .source-line {
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+  padding-right: 8px;
+}
+
+.source-row:hover,
+.source-gutter:focus-visible,
+.source-line:focus-visible {
   background: var(--accent-bg);
+}
+
+.source-breakpoint {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.source-gutter:hover .source-breakpoint {
+  background: var(--breakpoint);
+  opacity: 0.35;
+}
+
+.source-gutter.breakpoint .source-breakpoint {
+  background: var(--breakpoint);
+  opacity: 1;
 }
 
 .source-row.current {
@@ -41,7 +78,7 @@
 }
 
 .source-number {
-  flex: none;
+  flex: 1;
   padding-right: 4px;
   text-align: right;
   color: var(--text);

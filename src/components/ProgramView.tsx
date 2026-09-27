@@ -106,8 +106,10 @@ export function ProgramView({
       {playbackBar}
 
       <p className="hint">
-        Read-only view of {fileName}. Click a source line or a problem to jump to it; ← and → step through moves,
-        Space plays and pauses. Close the file to return to your drawing; it is kept as you left it.
+        Read-only view of {fileName}. Click a source line or a problem to jump to it, a line number to set a
+        breakpoint, Alt+click a line to play until it. ← and → step through moves (Shift for one block), Space plays
+        and pauses, Home/End jump to the ends, + and − change speed. Close the file to return to your drawing; it is
+        kept as you left it.
       </p>
     </div>
   );

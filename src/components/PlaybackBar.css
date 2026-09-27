@@ -9,24 +9,49 @@
 .playback-scrubber {
   flex: 1;
   min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.playback-scrubber input,
+.playback-speed input {
   accent-color: var(--accent);
 }
 
-.playback-bar select {
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text-h);
-  font: inherit;
-  font-size: 13px;
+.playback-scrubber input {
+  width: 100%;
+  margin: 0;
+}
+
+/* Inset by about half a range thumb, so a time lines up with the thumb there. */
+.playback-marks {
+  display: block;
+  height: 8px;
+  margin: 0 8px;
+}
+
+.playback-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.playback-speed input {
+  width: 110px;
 }
 
 .playback-time,
-.playback-readout {
+.playback-readout,
+.playback-speed-value {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.playback-speed-value {
+  min-width: 4ch;
+  color: var(--text-h);
 }
 
 .playback-time {
