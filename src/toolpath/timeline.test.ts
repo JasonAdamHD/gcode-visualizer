@@ -10,7 +10,7 @@ import { estimateCutTime } from './estimate';
 import type { Move, Point3 } from './moves';
 import { buildMoves } from './moves';
 import { blockTime, planTime } from './planner';
-import { adjacentMoveTime, buildTimeline, moveBlockStarts, profileAt, sampleTimeline } from './timeline';
+import { adjacentBlockTime, adjacentMoveTime, buildTimeline, moveBlockStarts, profileAt, sampleTimeline } from './timeline';
 
 const seg = (start: Point, end: Point, bulge = 0): Segment => ({ type: bulge ? 'arc' : 'line', start, end, bulge });
 const pt = (x: number, y: number): Point => ({ x, y });
@@ -219,6 +219,25 @@ describe('moveBlockStarts', () => {
     expect([first[0], first[1], first[2]]).toEqual([0, 1, 1]);
     expect(first[3]).toBe(timeline.blocks.length);
     for (let b = first[2]; b < first[3]; b++) expect(timeline.blocks[b].move).toBe(2);
+  });
+});
+
+describe('adjacentBlockTime', () => {
+  const timeline = buildTimeline(buildMoves([circle], [true], params()), params());
+
+  it('steps through every distinct block start, then the end', () => {
+    let t = 0;
+    const visited = [t];
+    for (let next = adjacentBlockTime(timeline, t, 1); next !== null; next = adjacentBlockTime(timeline, t, 1)) {
+      t = next;
+      visited.push(t);
+    }
+    expect(visited).toEqual([...new Set(timeline.blockStart)]);
+    expect(visited[visited.length - 1]).toBe(timeline.total);
+    // Arcs are chorded, so there are more blocks than moves.
+    expect(visited.length).toBeGreaterThan(new Set(timeline.moveStart).size + 1);
+    expect(adjacentBlockTime(timeline, timeline.total, 1)).toBeNull();
+    expect(adjacentBlockTime(timeline, visited[5], -1)).toBe(visited[4]);
   });
 });
 

@@ -169,7 +169,19 @@ export function moveBlockStarts(timeline: Timeline): Int32Array {
  * never lands twice on the same time.
  */
 export function adjacentMoveTime(timeline: Timeline, t: number, direction: 1 | -1): number | null {
-  const starts = timeline.moveStart;
+  return adjacentTime(timeline.moveStart, t, direction);
+}
+
+/**
+ * Like `adjacentMoveTime`, one planner block at a time (an arc is many
+ * blocks), including the end of the last block.
+ */
+export function adjacentBlockTime(timeline: Timeline, t: number, direction: 1 | -1): number | null {
+  return adjacentTime(timeline.blockStart, t, direction);
+}
+
+/** The nearest entry of sorted `starts` strictly after (1) or before (−1) `t`, beyond a 1 ns tolerance. */
+function adjacentTime(starts: Float64Array, t: number, direction: 1 | -1): number | null {
   const eps = 1e-9;
   // First index whose start is > t + eps (for 1) or >= t - eps (for −1).
   const target = direction === 1 ? t + eps : t - eps;
