@@ -138,3 +138,20 @@ describe('planBlocks', () => {
     expect(blocks.reduce((sum, b) => sum + b.time, 0)).toBe(planTime(corner, params()).total);
   });
 });
+
+describe('planTime: per-move feed rate', () => {
+  it('runs a feed at its own feedRate instead of the parameter', () => {
+    const own = planTime([{ ...feed(p(0, 0), p(20, 0)), feedRate: 300 }], params()).total;
+    expect(own).toBeCloseTo(planTime([feed(p(0, 0), p(20, 0))], params({ feedRate: 300 })).total, 12);
+  });
+
+  it('runs a plunge at its own feedRate instead of the plunge rate', () => {
+    const plunge = (feedRate?: number): Move => ({ kind: 'plunge', from: p(0, 0, 0), to: p(0, 0, -1), feedRate });
+    expect(planTime([plunge(30)], params()).total).toBeCloseTo(planTime([plunge()], params({ plungeRate: 30 })).total, 12);
+  });
+
+  it('ignores feedRate on rapids', () => {
+    const rapid: Move = { kind: 'rapid', from: p(0, 0), to: p(20, 0) };
+    expect(planTime([{ ...rapid, feedRate: 1 }], params()).total).toBe(planTime([rapid], params()).total);
+  });
+});

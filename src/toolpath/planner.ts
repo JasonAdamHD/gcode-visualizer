@@ -51,13 +51,15 @@ export function arcChordCount(radius: number, theta: number, tolerance: number):
 }
 
 /**
- * Nominal speed (units/s) for a move of `kind` in direction `u`. Rapids are
- * limited per axis, so the fastest speed keeps XY within `rapidRateXY` and
- * Z within `rapidRateZ`.
+ * Nominal speed (units/s) for `move` in direction `u`. Feeds and plunges
+ * run at the move's own `feedRate` (an imported F word) when it has one,
+ * else at `params.feedRate` / `params.plungeRate`. Rapids are limited per
+ * axis, so the fastest speed keeps XY within `rapidRateXY` and Z within
+ * `rapidRateZ`.
  */
-function nominalSpeed(kind: Move['kind'], u: Point3, params: MachineParams): number {
-  if (kind === 'feed') return params.feedRate / 60;
-  if (kind === 'plunge') return params.plungeRate / 60;
+function nominalSpeed(move: Move, u: Point3, params: MachineParams): number {
+  if (move.kind === 'feed') return (move.feedRate ?? params.feedRate) / 60;
+  if (move.kind === 'plunge') return (move.feedRate ?? params.plungeRate) / 60;
   const xy = Math.hypot(u.x, u.y);
   const z = Math.abs(u.z);
   return Math.min(
@@ -97,7 +99,7 @@ export function linearize(moves: Move[], params: MachineParams): Block[] {
       const length = Math.hypot(d.x, d.y, d.z);
       if (length > EPS) {
         const u = { x: d.x / length, y: d.y / length, z: d.z / length };
-        blocks.push({ move: index, from, length, u, vNom: nominalSpeed(move.kind, u, params) });
+        blocks.push({ move: index, from, length, u, vNom: nominalSpeed(move, u, params) });
       }
       from = to;
     }
