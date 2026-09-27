@@ -33,3 +33,31 @@ export type Diagnostic = {
   code: DiagnosticCode;
   message: string;
 };
+
+/** Diagnostics sharing a code, for a list that stays short on a 10⁵-line file. */
+export type DiagnosticGroup = {
+  code: DiagnosticCode;
+  severity: Severity;
+  /** The group's diagnostics in line order. */
+  items: Diagnostic[];
+};
+
+const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
+
+/**
+ * Groups diagnostics by code, errors first, then warnings, then info; within
+ * a severity, groups are ordered by their first line.
+ */
+export function groupDiagnostics(diagnostics: Diagnostic[]): DiagnosticGroup[] {
+  const groups = new Map<DiagnosticCode, DiagnosticGroup>();
+  for (const d of diagnostics) {
+    const group = groups.get(d.code);
+    if (group) group.items.push(d);
+    else groups.set(d.code, { code: d.code, severity: d.severity, items: [d] });
+  }
+  const sorted = [...groups.values()];
+  for (const g of sorted) g.items.sort((a, b) => a.line - b.line);
+  return sorted.sort(
+    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.items[0].line - b.items[0].line
+  );
+}
