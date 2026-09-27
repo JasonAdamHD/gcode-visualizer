@@ -4,11 +4,13 @@
 
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { segmentPathData } from '../geometry/segment';
 import { niceGridSpacing } from '../geometry/snapping';
 import { moveBounds, moveKindPaths } from '../gcode/pathData';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
 import type { Move } from '../toolpath/moves';
+import type { TimelineSample } from '../toolpath/timeline';
 import { SheetGrid } from './SheetGrid';
 import './Workspace.css';
 import './Canvas.css';
@@ -24,15 +26,32 @@ type ProgramViewProps = {
   estimate: CutTimeEstimate;
   /** The 2D/3D switch, rendered at the start of the toolbar. */
   viewToggle: ReactNode;
+  /** Machine state at the playback time: the tool is drawn at its position. */
+  sample: TimelineSample;
+  /** The move in progress, highlighted, or null. */
+  currentMove: Move | null;
+  /** Playback controls, rendered under the view. */
+  playbackBar: ReactNode;
 };
 
 /**
  * Read-only 2D view of an imported program: the sheet, feeds solid, rapids
- * dashed, plunges and retracts as dots, projected onto XY. The view frames
+ * dashed, plunges and retracts as dots, projected onto XY, with the current
+ * move highlighted and the tool at its playback position. The view frames
  * the sheet and everything the program reaches, so moves off the sheet
  * stay visible.
  */
-export function ProgramView({ moves, sheet, fileName, lineCount, estimate, viewToggle }: ProgramViewProps) {
+export function ProgramView({
+  moves,
+  sheet,
+  fileName,
+  lineCount,
+  estimate,
+  viewToggle,
+  sample,
+  currentMove,
+  playbackBar,
+}: ProgramViewProps) {
   const gridSpacing = useMemo(() => niceGridSpacing(sheet.x, sheet.y), [sheet.x, sheet.y]);
   const paths = useMemo(() => moveKindPaths(moves), [moves]);
   const bounds = useMemo(() => moveBounds(moves), [moves]);
@@ -42,6 +61,17 @@ export function ProgramView({ moves, sheet, fileName, lineCount, estimate, viewT
   const minY = Math.min(0, bounds?.minY ?? 0) - margin;
   const maxX = Math.max(sheet.x, bounds?.maxX ?? 0) + margin;
   const maxY = Math.max(sheet.y, bounds?.maxY ?? 0) + margin;
+  const currentPath = currentMove
+    ? `M ${currentMove.from.x} ${currentMove.from.y} ` +
+      segmentPathData({
+        type: currentMove.bulge ? 'arc' : 'line',
+        start: currentMove.from,
+        end: currentMove.to,
+        bulge: currentMove.bulge,
+      })
+    : '';
+  const tool = sample.position;
+
   // World Y-up is flipped about Y = 0, so the top of the view is −maxY.
   const viewBox = `${minX} ${-maxY} ${maxX - minX} ${maxY - minY}`;
 
@@ -68,11 +98,16 @@ export function ProgramView({ moves, sheet, fileName, lineCount, estimate, viewT
           <path d={paths.feed} className="program-feed" />
           <path d={paths.plunge} className="program-plunge" />
           <path d={paths.retract} className="program-retract" />
+          <path d={currentPath} className="program-current" />
+          {sample.moveIndex >= 0 && <path d={`M ${tool.x} ${tool.y} h 0`} className="program-tool" />}
         </g>
       </svg>
 
+      {playbackBar}
+
       <p className="hint">
-        Read-only view of {fileName}. Close the file to return to your drawing; it is kept as you left it.
+        Read-only view of {fileName}. Click a source line or a problem to jump to it; ← and → step through moves,
+        Space plays and pauses. Close the file to return to your drawing; it is kept as you left it.
       </p>
     </div>
   );

@@ -2,20 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DragEvent } from 'react';
 import { Canvas } from './components/Canvas';
 import { ParametersPanel } from './components/ParametersPanel';
 import type { ProgramSummary } from './components/ParametersPanel';
 import { ProgramBar } from './components/ProgramBar';
-import { ProgramView } from './components/ProgramView';
-import { ViewErrorBoundary } from './components/ViewErrorBoundary';
+import { PlaybackWorkspace } from './components/PlaybackWorkspace';
+import type { WorkspaceProgram } from './components/PlaybackWorkspace';
 import type { ViewMode } from './components/ViewToggle';
 import { ViewToggle } from './components/ViewToggle';
 import type { MachineParams, Units } from './machine/params';
 import { DEFAULT_PARAMS, unitFactor } from './machine/params';
 import { analyzeProgram } from './gcode/analyze';
-import { parseGcode } from './gcode/parse';
+import { parseGcode, sourceLines } from './gcode/parse';
 import { scaleMoves } from './gcode/scale';
 import { useDrawingState } from './state/useDrawingState';
 import { useMachineParams } from './state/useMachineParams';
@@ -24,9 +24,6 @@ import { estimateCutTime } from './toolpath/estimate';
 import { buildMoves } from './toolpath/moves';
 import { effectiveCutSide } from './toolpath/offset';
 import { computeToolpath } from './toolpath/toolpath';
-
-// Three.js is only downloaded once the 3D view is first opened.
-const Viewer3D = lazy(() => import('./components/Viewer3D'));
 
 const SAMPLE_URL = `${import.meta.env.BASE_URL}samples/demo.nc`;
 
@@ -120,16 +117,24 @@ function App() {
     () => (program && programMoves ? [...program.diagnostics, ...analyzeProgram(programMoves, params)] : []),
     [program, programMoves, params]
   );
-  const programSummary: ProgramSummary | null =
-    program && source
-      ? {
-          fileName: source.name,
-          units: program.units,
-          lineCount: program.lineCount,
-          moveCount: program.moves.length,
-          diagnostics,
-        }
-      : null;
+  const lines = useMemo(() => (source ? sourceLines(source.text) : []), [source]);
+  const workspaceProgram = useMemo<WorkspaceProgram | null>(
+    () => (source && program ? { fileName: source.name, lines, diagnostics } : null),
+    [source, program, lines, diagnostics]
+  );
+  const programSummary = useMemo<ProgramSummary | null>(
+    () =>
+      source && program
+        ? {
+            fileName: source.name,
+            units: program.units,
+            lineCount: program.lineCount,
+            moveCount: program.moves.length,
+            problemCount: diagnostics.filter((d) => d.severity !== 'info').length,
+          }
+        : null,
+    [source, program, diagnostics]
+  );
 
   const estimate = useMemo(() => estimateCutTime(moves, params), [moves, params]);
   const viewToggle = <ViewToggle view={view} onChange={setView} />;
@@ -178,22 +183,7 @@ function App() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {view === '3d' ? (
-          <ViewErrorBoundary viewToggle={viewToggle}>
-            <Suspense fallback={<div className="canvas-workspace view-loading">Loading 3D view…</div>}>
-              <Viewer3D moves={moves} params={params} estimate={estimate} viewToggle={viewToggle} />
-            </Suspense>
-          </ViewErrorBoundary>
-        ) : program && source ? (
-          <ProgramView
-            moves={moves}
-            sheet={params.sheet}
-            fileName={source.name}
-            lineCount={program.lineCount}
-            estimate={estimate}
-            viewToggle={viewToggle}
-          />
-        ) : (
+        {view === '2d' && !workspaceProgram ? (
           <Canvas
             drawing={drawing}
             sheet={params.sheet}
@@ -201,6 +191,15 @@ function App() {
             toolpath={toolpath}
             estimate={estimate}
             viewToggle={viewToggle}
+          />
+        ) : (
+          <PlaybackWorkspace
+            view={view}
+            viewToggle={viewToggle}
+            moves={moves}
+            params={params}
+            estimate={estimate}
+            program={workspaceProgram}
           />
         )}
         <ParametersPanel

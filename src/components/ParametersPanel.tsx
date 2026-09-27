@@ -4,7 +4,6 @@
 
 import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import type { Diagnostic } from '../gcode/diagnostics';
 import type { BitKind, BitShape, FieldKey, MachineParams, Units } from '../machine/params';
 import { displayDecimals, formatNumber, parseParams, serializeParams, validateParams } from '../machine/params';
 import type { CutTimeEstimate } from '../toolpath/estimate';
@@ -12,7 +11,6 @@ import { formatDuration } from '../toolpath/estimate';
 import { passDepths } from '../toolpath/moves';
 import type { CutSide } from '../toolpath/offset';
 import type { Toolpath } from '../toolpath/toolpath';
-import { DiagnosticsList } from './DiagnosticsList';
 import { NumberField } from './NumberField';
 import './ParametersPanel.css';
 
@@ -23,7 +21,8 @@ export type ProgramSummary = {
   units: Units;
   lineCount: number;
   moveCount: number;
-  diagnostics: Diagnostic[];
+  /** Errors and warnings; they are listed in the program pane. */
+  problemCount: number;
 };
 
 type ParametersPanelProps = {
@@ -189,7 +188,9 @@ export function ParametersPanel({
           <p className="derived">
             File units <output>{program.units}</output>
           </p>
-          <DiagnosticsList diagnostics={program.diagnostics} />
+          <p className="derived">
+            Problems <output>{program.problemCount}</output>
+          </p>
         </fieldset>
       )}
 

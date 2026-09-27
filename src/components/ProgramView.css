@@ -37,3 +37,17 @@
   stroke-width: 3px;
   stroke-linecap: round;
 }
+
+.program-current {
+  stroke: var(--current-move);
+  stroke-width: 4px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.program-tool {
+  stroke: var(--text-h);
+  stroke-width: 10px;
+  stroke-linecap: round;
+  opacity: 0.8;
+}
