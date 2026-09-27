@@ -2,16 +2,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { segmentPathData } from '../geometry/segment';
 import { niceGridSpacing } from '../geometry/snapping';
+import { fitBox, viewBoxAttr } from '../geometry/viewport';
 import { moveBounds, moveKindPaths } from '../gcode/pathData';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
 import type { Move } from '../toolpath/moves';
 import type { TimelineSample } from '../toolpath/timeline';
 import { SheetGrid } from './SheetGrid';
+import { usePanZoom } from './usePanZoom';
 import './Workspace.css';
 import './Canvas.css';
 import './ProgramView.css';
@@ -56,11 +58,17 @@ export function ProgramView({
   const paths = useMemo(() => moveKindPaths(moves), [moves]);
   const bounds = useMemo(() => moveBounds(moves), [moves]);
 
-  const margin = gridSpacing;
-  const minX = Math.min(0, bounds?.minX ?? 0) - margin;
-  const minY = Math.min(0, bounds?.minY ?? 0) - margin;
-  const maxX = Math.max(sheet.x, bounds?.maxX ?? 0) + margin;
-  const maxY = Math.max(sheet.y, bounds?.maxY ?? 0) + margin;
+  // The sheet and everything the program reaches. World Y-up is flipped
+  // about Y = 0, so in SVG user units the box spans −maxY … −minY.
+  const home = useMemo(() => {
+    const minX = Math.min(0, bounds?.minX ?? 0);
+    const minY = Math.min(0, bounds?.minY ?? 0);
+    const maxX = Math.max(sheet.x, bounds?.maxX ?? 0);
+    const maxY = Math.max(sheet.y, bounds?.maxY ?? 0);
+    return fitBox({ minX, minY: -maxY, maxX, maxY: -minY }, gridSpacing);
+  }, [bounds, sheet.x, sheet.y, gridSpacing]);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const { viewBox, zoom, reset: fitView } = usePanZoom(svgRef, home);
   const currentPath = currentMove
     ? `M ${currentMove.from.x} ${currentMove.from.y} ` +
       segmentPathData({
@@ -72,8 +80,6 @@ export function ProgramView({
     : '';
   const tool = sample.position;
 
-  // World Y-up is flipped about Y = 0, so the top of the view is −maxY.
-  const viewBox = `${minX} ${-maxY} ${maxX - minX} ${maxY - minY}`;
 
   return (
     <div className="canvas-workspace">
@@ -85,15 +91,22 @@ export function ProgramView({
           <span className="swatch swatch-vertical" /> plunge
           <span className="swatch swatch-rapid" /> rapid
         </span>
+        <span className="divider" />
+        <button type="button" onClick={fitView} disabled={zoom === 1 && viewBoxAttr(viewBox) === viewBoxAttr(home)} title="Show the whole program and sheet (0)">
+          Fit
+        </button>
         <span className="status">
           {lineCount} line{lineCount === 1 ? '' : 's'} · {moves.length} move{moves.length === 1 ? '' : 's'}
           {estimate.total > 0 && ` · est. ${formatDuration(estimate.total)}`}
         </span>
       </div>
 
-      <svg className="drawing-svg program-svg" viewBox={viewBox} role="img" aria-label={`Toolpath of ${fileName}`}>
+      <svg
+        ref={svgRef}
+        className="drawing-svg program-svg"
+        viewBox={viewBoxAttr(viewBox)} role="img" aria-label={`Toolpath of ${fileName}`}>
         <g transform="scale(1 -1)">
-          <SheetGrid sheet={sheet} gridSpacing={gridSpacing} />
+          <SheetGrid sheet={sheet} gridSpacing={gridSpacing} strokeScale={1 / zoom} />
           <path d={paths.rapid} className="program-rapid" />
           <path d={paths.feed} className="program-feed" />
           <path d={paths.plunge} className="program-plunge" />
@@ -108,7 +121,8 @@ export function ProgramView({
       <p className="hint">
         Read-only view of {fileName}. Click a source line or a problem to jump to it, a line number to set a
         breakpoint, Alt+click a line to play until it. ← and → step through moves (Shift for one block), Space plays
-        and pauses, Home/End jump to the ends, + and − change speed. Close the file to return to your drawing; it is
+        and pauses, Home/End jump to the ends, + and − change speed. Scroll to zoom, right- or middle-drag to pan, 0 to
+        fit. Close the file to return to your drawing; it is
         kept as you left it.
       </p>
     </div>
