@@ -50,6 +50,13 @@ describe('parseGcode: basics', () => {
     expect(moves.map((m) => m.sourceLine)).toEqual([3, 5, 6]);
   });
 
+  it('ignores round-off in the start position: no phantom move, same kinds', () => {
+    // 0.5 in via mm and back is 0.49999999999999994 in.
+    const start = { point: { x: 1e-16, y: 0, z: 12.7 * (1 / 25.4) }, units: 'in' as const };
+    const { moves } = parseGcode(['G20', 'G0 Z0.5', 'G0 Z1'].join('\n'), start);
+    expect(moves.map((m) => m.kind)).toEqual(['retract']);
+  });
+
   it('drops zero-length straight moves', () => {
     const { moves } = parse(['G21', 'G0 X0 Y0 Z5', 'G1 X1 F100', 'G1 X1']);
     expect(moves).toHaveLength(1);

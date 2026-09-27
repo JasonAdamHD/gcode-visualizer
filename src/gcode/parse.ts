@@ -110,7 +110,14 @@ function programUnits(lines: TokenizedLine[]): Units | null {
   return null;
 }
 
-const samePoint = (a: Point3, b: Point3) => a.x === b.x && a.y === b.y && a.z === b.z;
+/**
+ * Distances at or below this (program units) count as no motion, so unit
+ * round-off (a 0.5 in start height that comes back as 0.49999999999999994)
+ * neither adds a phantom move nor changes a move's kind.
+ */
+const SAME = 1e-9;
+const sameXY = (a: Point3, b: Point3) => Math.abs(a.x - b.x) <= SAME && Math.abs(a.y - b.y) <= SAME;
+const samePoint = (a: Point3, b: Point3) => sameXY(a, b) && Math.abs(a.z - b.z) <= SAME;
 
 /**
  * An arc's center and signed sweep (radians, positive = CCW) from I/J
@@ -275,12 +282,12 @@ export function parseGcode(text: string, start: StartPosition): GcodeProgram {
     }
 
     if (motion === 0) {
-      const up = to.x === pos.x && to.y === pos.y && to.z > pos.z;
+      const up = sameXY(to, pos) && to.z > pos.z;
       emit(line, up ? 'retract' : 'rapid', to);
       return;
     }
     if (motion === 1) {
-      const down = to.x === pos.x && to.y === pos.y && to.z < pos.z;
+      const down = sameXY(to, pos) && to.z < pos.z;
       emit(line, down ? 'plunge' : 'feed', to);
       return;
     }
