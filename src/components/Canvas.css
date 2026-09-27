@@ -136,3 +136,7 @@
   stroke: var(--accent);
   opacity: 0.5;
 }
+
+.drawing-svg.panning {
+  cursor: grabbing;
+}

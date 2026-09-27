@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { Point } from '../geometry/segment';
+import { fitBox, viewBoxAttr } from '../geometry/viewport';
 import { pathToSvgPath, segmentHandlePoint } from '../geometry/segment';
 import { findSnapPoint, constrainToAxis, snapToNothing, niceGridSpacing, snapToGrid, type SnapResult } from '../geometry/snapping';
 import type { Units } from '../machine/params';
@@ -13,6 +14,7 @@ import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
 import type { Toolpath } from '../toolpath/toolpath';
 import { SheetGrid } from './SheetGrid';
+import { usePanZoom } from './usePanZoom';
 import './Workspace.css';
 import './Canvas.css';
 
@@ -47,8 +49,18 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, v
   const suppressNextClickRef = useRef(false);
 
   const gridSpacing = useMemo(() => niceGridSpacing(sheetSize.x, sheetSize.y), [sheetSize]);
-  const tolerance = gridSpacing * 0.35;
   const margin = gridSpacing;
+  // The whole sheet with a grid square to spare; SVG user units are world X and flipped Y.
+  const home = useMemo(
+    () => fitBox({ minX: 0, minY: 0, maxX: sheetSize.x, maxY: sheetSize.y }, margin),
+    [sheetSize.x, sheetSize.y, margin]
+  );
+  const { viewBox, zoom, reset: fitView } = usePanZoom(svgRef, home);
+  // Sizes meant for the screen (snap reach, handles, thin strokes) are set
+  // at the unzoomed scale and shrink in world units as the view zooms in, so
+  // snapping and handles feel the same at any zoom.
+  const px = 1 / zoom;
+  const tolerance = gridSpacing * 0.35 * px;
 
   const screenToWorld = useCallback(
     (e: { clientX: number; clientY: number }): Point | null => {
@@ -138,11 +150,11 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, v
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [drawing]);
 
-  const strokeThin = gridSpacing * 0.01;
-  const strokePath = gridSpacing * 0.05;
-  const handleRadius = gridSpacing * 0.12;
-  const dotRadius = gridSpacing * 0.08;
-  const snapRadius = gridSpacing * 0.18;
+  const strokeThin = gridSpacing * 0.01 * px;
+  const strokePath = gridSpacing * 0.05 * px;
+  const handleRadius = gridSpacing * 0.12 * px;
+  const dotRadius = gridSpacing * 0.08 * px;
+  const snapRadius = gridSpacing * 0.18 * px;
 
   // Closed loops get a Z so the round join also applies at the start point.
   const toolpathData = toolpath.loops.map((loop, i) => pathToSvgPath(loop) + (toolpath.closed[i] ? ' Z' : ''));
@@ -173,6 +185,10 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, v
           Clear
         </button>
         <span className="divider" />
+        <button type="button" onClick={fitView} disabled={zoom === 1 && viewBoxAttr(viewBox) === viewBoxAttr(home)} title="Show the whole sheet (0)">
+          Fit
+        </button>
+        <span className="divider" />
         <span className="status">
           {drawing.segments.length} segment{drawing.segments.length === 1 ? '' : 's'}
           {' · '}
@@ -186,13 +202,13 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, v
       <svg
         ref={svgRef}
         className="drawing-svg"
-        viewBox={`${-margin} ${-margin} ${sheetSize.x + 2 * margin} ${sheetSize.y + 2 * margin}`}
+        viewBox={viewBoxAttr(viewBox)}
         onPointerMove={handlePointerMove}
         onClick={handleClick}
         onPointerLeave={() => setHover(null)}
       >
         <g transform={`translate(0 ${sheetSize.y}) scale(1 -1)`}>
-          <SheetGrid sheet={sheetSize} gridSpacing={gridSpacing} />
+          <SheetGrid sheet={sheetSize} gridSpacing={gridSpacing} strokeScale={px} />
 
           {drawing.segments.length > 0 && (
             <path
@@ -212,7 +228,7 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, v
               d={d}
               className="toolpath"
               strokeWidth={strokeThin * 3}
-              strokeDasharray={`${gridSpacing * 0.1} ${gridSpacing * 0.06}`}
+              strokeDasharray={`${gridSpacing * 0.1 * px} ${gridSpacing * 0.06 * px}`}
             />
           ))}
 
@@ -237,6 +253,8 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, v
                 r={handleRadius}
                 className={segment.bulge ? 'handle handle-arc' : 'handle'}
                 onPointerDown={(e) => {
+                  // Other buttons pan the view.
+                  if (e.button !== 0) return;
                   e.stopPropagation();
                   suppressNextClickRef.current = true;
                   drawing.beginDrag(i);
@@ -275,6 +293,7 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, v
       <p className="hint">
         Click to place points and draw connected line segments. Drag a segment's midpoint handle to bow it into an
         arc. Endpoints and grid intersections snap automatically. Hold Shift to place a point anywhere, or Ctrl/Cmd to constrain the next point to a horizontal or vertical line from the last.
+        Scroll to zoom, right- or middle-drag to pan, 0 to fit the sheet.
       </p>
     </div>
   );

@@ -8,10 +8,12 @@ type SheetGridProps = {
   /** Sheet extents in world units, origin at the lower-left corner. */
   sheet: { x: number; y: number };
   gridSpacing: number;
+  /** Multiplies the grid's stroke width; pass 1 / zoom to keep it the same on screen when zoomed. */
+  strokeScale?: number;
 };
 
 /** The sheet rectangle and its grid, in world coordinates (render inside the Y-flipped group). */
-export function SheetGrid({ sheet, gridSpacing }: SheetGridProps) {
+export function SheetGrid({ sheet, gridSpacing, strokeScale = 1 }: SheetGridProps) {
   const gridLines = useMemo(() => {
     const lines: { key: string; x1: number; y1: number; x2: number; y2: number }[] = [];
     for (let x = 0; x <= sheet.x + 1e-6; x += gridSpacing) {
@@ -34,7 +36,7 @@ export function SheetGrid({ sheet, gridSpacing }: SheetGridProps) {
           x2={line.x2}
           y2={line.y2}
           className="grid-line"
-          strokeWidth={gridSpacing * 0.01}
+          strokeWidth={gridSpacing * 0.01 * strokeScale}
         />
       ))}
     </>

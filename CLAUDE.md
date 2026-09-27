@@ -36,6 +36,8 @@ npm run check        # lint + build + test: run before every commit
     DXF **bulge** convention (`bulge = tan(θ/4)`, 0 = straight, positive =
     counterclockwise); SVG path generation; path length and closure.
   - `snapping.ts`: grid spacing, endpoint/grid/axis snapping.
+  - `viewport.ts`: 2D pan/zoom as viewBox math in SVG user units
+    (`zoomAt` keeps the cursor point fixed, `panBy`, `fitBox`).
 - `src/machine/params.ts` holds the pure `MachineParams` model (units,
   sheet, bit shape, feeds, spoilboard penetration, and the v2 motion fields:
   rapid rates, safe height, depth per pass, acceleration, junction
@@ -67,10 +69,33 @@ npm run check        # lint + build + test: run before every commit
   - `timeline.ts`: playback timing on top of `planBlocks`. `profileAt`
     inverts `blockTime`; `sampleTimeline` gives position, move, block and
     speed at any time. Its total must equal the estimate (tested).
-    `moveBlockStarts` and `adjacentMoveTime` support step-through.
-- `src/sim/sceneData.ts` holds pure data for the 3D view: per-kind line
-  buffers, a playback-ordered path buffer (piece `i` = timeline block `i`),
-  and lathe outlines for the bit shapes.
+    `moveBlockStarts`, `adjacentMoveTime` and `adjacentBlockTime` support
+    step-through.
+  - `stops.ts`: breakpoints as sorted stop times; `advanceClock` is one
+    frame of the playback clock, pausing exactly on the first stop it
+    crosses in `(t0, t1]` (so it never re-stops where it paused).
+  - `scrubber.ts`: motion bands per time bin and problem ticks for the
+    scrubber strip, bucketed so long programs cost one canvas draw.
+- `src/sim/` holds pure data and math for the 3D view (tested):
+  - `sceneData.ts`: per-kind line buffers, a playback-ordered path buffer
+    (piece `i` = timeline block `i`), `kindCounts` for drawing the played
+    path per kind, and lathe outlines for the bit shapes.
+  - `stock.ts`: material removal as a **heightfield** over the sheet
+    (`nx × ny` points, capped at `MAX_CELLS`). Cutting only ever takes
+    `min(height, tool surface)`, clamped at −thickness, so cutting a move in
+    pieces equals cutting it whole; keep it that way. `cutSegment` is exact
+    per grid point (the tool surface along a move is convex in the move
+    parameter for every bit shape). Exact for 3-axis moves with a vertical
+    bit only.
+  - `stockSim.ts`: `StockSimulator` cuts towards the playback position
+    within a work budget (so the view can spread it over frames) and seeks
+    backwards by restoring the nearest **checkpoint**; any seek sequence
+    must equal a from-scratch cut (tested).
+  - `stockMesh.ts`: surface and skirt buffers; a cut rewrites only its rows.
+  - `camera.ts`: view presets, `framePose` (fits a box from a direction),
+    `jobBounds`, ortho sizing. Camera up is always +Z; the top view leans a
+    hair towards −Y so OrbitControls keeps an azimuth.
+  - `layers.ts`: the 3D layer toggles and their stored JSON.
 - `src/state/useDrawingState.ts` is a React hook holding drawing state as
   immutable snapshots in a history array (undo/redo moves an index). Arc
   bowing uses a transient drag state that commits one snapshot on release.
@@ -78,7 +103,11 @@ npm run check        # lint + build + test: run before every commit
   localStorage. It knows nothing about the drawing.
 - `src/state/usePlayback.ts` is the transient playback clock (not in
   history, not persisted): a requestAnimationFrame loop that pauses and
-  clamps when the timeline changes.
+  clamps when the timeline changes, and pauses on `stops` (breakpoints)
+  and a one-off `runTo` target; seeks ignore stops. `playbackSpeed.ts`
+  maps the log speed slider (with detents) to a speed.
+- `src/state/useLayers.ts` holds the 3D layer toggles, per viewer in
+  localStorage.
 - `src/state/useProgram.ts` holds the open G-code file's name and text,
   in memory only: never uploaded, never persisted (README Privacy).
 - `src/App.tsx` owns the drawing, params and program hooks. While a
@@ -89,20 +118,32 @@ npm run check        # lint + build + test: run before every commit
   place via `rescale`, so undo never shows inch geometry on an mm sheet.
 - `src/components/Canvas.tsx` does SVG rendering and pointer handling. It
   converts screen coordinates to world coordinates and picks the snap mode
-  from modifier keys (Ctrl/Cmd = axis lock, Shift = no snap).
+  from modifier keys (Ctrl/Cmd = axis lock, Shift = no snap). Canvas and
+  `ProgramView` share `usePanZoom` (wheel zoom at the cursor, middle/right
+  drag pan, `0` or Fit to reset; the left button stays with the view).
+  Screen-sized things in Canvas (snap reach, handles, thin strokes) are
+  divided by the zoom so they feel the same at any zoom.
 - `src/components/Viewer3D.tsx` is the 3D view, lazily loaded (Three.js
   stays out of the main chunk) inside `ViewErrorBoundary`. It owns Three.js
   imperatively: one effect creates/disposes the renderer, others rebuild
   geometry or move the bit, and frames render on demand. The scene uses
   machine coordinates directly; only the camera differs from Three.js
   defaults (`camera.up = (0, 0, 1)`, **Z up**). Never swap axes in scene
-  data. It gets the timeline, clock and sample as props.
-  `PlaybackBar.tsx` holds the playback controls and readout.
+  data. It gets the timeline and sample as props. The stock is cut in
+  time-boxed slices per animation frame and only dirty rows are uploaded;
+  never rebuild the stock geometry during playback. Layers only toggle
+  `visible`. A second (orthographic) camera is swapped in for Ortho.
+  `PlaybackBar.tsx` holds the playback controls, the scrubber strip and
+  the readout.
 - `src/components/PlaybackWorkspace.tsx` owns the one playback clock
   (`usePlayback`) shared by the 3D view, the read-only 2D `ProgramView`
   and the `ProgramPane` (problems + virtualized `SourceListing`), so they
   agree on the current move and only this subtree re-renders while
-  playing. The drawing's 2D `Canvas` sits outside it.
+  playing. It handles the playback keys, builds the one `PlaybackBar` for
+  both views, and holds breakpoints (transient, reset when another file
+  opens) and "Stop at problems". The drawing's 2D `Canvas` sits outside it.
+  Keyboard shortcuts go through `keyboard.ts` (`ignoreShortcut`: modifiers
+  and form controls are left alone).
 - World coordinates are **Y-up** (CNC convention). SVG is Y-down, so the
   flip happens at the canvas boundary (`screenToWorld`). Keep geometry code
   in world coordinates.

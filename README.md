@@ -84,8 +84,14 @@ from changing `master` directly.
       reported rather than silently ignored. Controller-specific dialects
       (e.g. Biesse) are planned later, behind a per-controller dialect
       layer on top of the same parser
-- [ ] Phase 6 — 3D visualization enhancements (material removal, camera
-      controls, better playback)
+- [x] Phase 6 — 3D visualization enhancements: material removal on a
+      heightfield stock, cut by the real bit shape (flat, ball, V) in step
+      with playback, forwards and backwards, and spread over frames so long
+      programs stay responsive; layer toggles; camera presets (iso, top,
+      front, right), fit to the job, follow the bit and an orthographic view;
+      a scrubber marked with the kind of motion and the problems over time,
+      continuous speed, more keyboard control, breakpoints, "play until this
+      line" and "stop at problems"; pan and zoom in the 2D views
 - [ ] Phase 7 — Optional account, hosted on AWS: save your own programs and
       share a deep link to a specific line; parsing stays in the browser,
       and a file is uploaded only when you choose to save it (see
@@ -148,13 +154,13 @@ however you want.
 
 ```
 /src
-  /geometry      # Segment/Path types, bulge (arc) math, snapping (+ *.test.ts)
+  /geometry      # Segment/Path types, bulge (arc) math, snapping, 2D viewport (+ *.test.ts)
   /machine       # Machine/job parameters: units, conversion, validation (+ *.test.ts)
-  /toolpath      # Cutter compensation, moves, planner, cut-time estimate, playback timeline (+ *.test.ts)
-  /sim           # Pure 3D scene data: line buffers, bit profiles (+ *.test.ts)
+  /toolpath      # Cutter compensation, moves, planner, cut-time estimate, playback timeline, scrubber marks, stops (+ *.test.ts)
+  /sim           # Pure 3D scene data, stock heightfield and camera math (+ *.test.ts)
   /gcode         # G-code tokenizer, parser and job checks -> Move[] (+ *.test.ts)
   /components    # UI components (Canvas, Viewer3D, ProgramView, SourceListing, ParametersPanel, etc.)
-  /state         # Drawing state (undo/redo), persisted machine params, playback clock, open G-code file
+  /state         # Drawing state (undo/redo), persisted machine params, playback clock and speed, 3D layers, open G-code file
 /.claude         # Claude Code settings and SessionStart hook
 /.github         # CI workflow
 /docs/plans      # Working plans handed to implementing agents
