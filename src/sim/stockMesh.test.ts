@@ -12,7 +12,6 @@ import {
   packedTileIndex,
   skirtIndex,
   skirtVertexCount,
-  tilesCovering,
   writeSkirt,
   writeTileVertices,
 } from './stockMesh';
@@ -77,16 +76,6 @@ describe('tile meshes', () => {
     const corner = TILE_VERTS - 1;
     expect(positions[corner * 3]).toBeCloseTo(sheet.x, 5);
     expect(positions[corner * 3 + 1]).toBeCloseTo(sheet.y, 5);
-  });
-
-  it('covers the tiles containing a rectangle and the ones before a shared edge', () => {
-    const stock = createStock(sheet, bit);
-    expect(tilesCovering(stock, { i0: 1, j0: 1, i1: 2, j1: 2 })).toEqual([0]);
-    // Column TILE is the first column of tile 1 and the stitch column of tile 0.
-    expect(tilesCovering(stock, { i0: TILE, j0: 1, i1: TILE, j1: 1 })).toEqual([0, 1]);
-    expect(tilesCovering(stock, { i0: TILE + 1, j0: 1, i1: TILE + 1, j1: 1 })).toEqual([1]);
-    const tx = stock.tx;
-    expect(tilesCovering(stock, { i0: TILE, j0: TILE, i1: TILE, j1: TILE })).toEqual([0, 1, tx, tx + 1]);
   });
 });
 

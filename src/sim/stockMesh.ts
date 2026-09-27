@@ -6,7 +6,7 @@
 // (sharing one index layout, so tiles can be packed into a few big
 // buffers), a coarse flat top over the uncut tiles, and a skirt of walls
 // from the surface edge down to the sheet bottom. Machine coordinates.
-import type { DirtyRect, Stock } from './stock';
+import type { Stock } from './stock';
 import { TILE, heightAt } from './stock';
 
 /** An 8-bit RGB color. */
@@ -86,20 +86,6 @@ export function writeTileVertices(
       v++;
     }
   }
-}
-
-/**
- * Tiles whose meshes show any point of `rect`: the tiles containing it, and
- * the tiles before them when it touches their shared first row or column.
- */
-export function tilesCovering(stock: Stock, rect: DirtyRect): number[] {
-  const { tx } = stock;
-  const range = (lo: number, hi: number) => [Math.max(0, Math.floor((lo - 1) / TILE)), Math.floor(hi / TILE)];
-  const [ti0, ti1] = range(rect.i0, rect.i1);
-  const [tj0, tj1] = range(rect.j0, rect.j1);
-  const out: number[] = [];
-  for (let tj = tj0; tj <= tj1; tj++) for (let ti = ti0; ti <= Math.min(ti1, tx - 1); ti++) out.push(tj * tx + ti);
-  return out;
 }
 
 /** Corner vertices of every tile slot, flat at the sheet top: `(tx + 1) × (ty + 1)`, clamped to the sheet. */

@@ -56,12 +56,15 @@ export type StockGrid = {
  * ever go down, never below `floor` (−thickness). `tiles[t]` holds tile
  * `t = tj·tx + ti` row by row, or null while nothing in it is cut (all 0).
  * `shared[t]` is 1 while that array is also held by a checkpoint, so it is
- * copied before its first write.
+ * copied before its first write. `dirtyTiles` lists the tiles whose
+ * meshes changed since the last `takeDirtyTiles` (flagged in `dirty`).
  */
 export type Stock = StockGrid & {
   floor: number;
   tiles: (Float32Array | null)[];
   shared: Uint8Array;
+  dirty: Uint8Array;
+  dirtyTiles: number[];
 };
 
 /** Grid points a cut may have changed: `i0..i1` × `j0..j1`, inclusive. */
@@ -143,7 +146,14 @@ export function stockGrid(sheet: MachineParams['sheet'], bit: Bit, strokes: read
 /** An uncut stock on `grid`. */
 export function stockFromGrid(sheet: MachineParams['sheet'], grid: StockGrid): Stock {
   const n = grid.tx * grid.ty;
-  return { ...grid, floor: -sheet.thickness, tiles: new Array<Float32Array | null>(n).fill(null), shared: new Uint8Array(n) };
+  return {
+    ...grid,
+    floor: -sheet.thickness,
+    tiles: new Array<Float32Array | null>(n).fill(null),
+    shared: new Uint8Array(n),
+    dirty: new Uint8Array(n),
+    dirtyTiles: [],
+  };
 }
 
 /** An uncut stock for cutting `strokes` with `bit` (see `stockGrid`). */
@@ -189,6 +199,24 @@ function writableTile(stock: Stock, t: number): Float32Array {
 /** Allocates tile `t` if it is not yet (uncut, all 0), without copying a shared one. */
 function ensureTile(stock: Stock, t: number) {
   if (!stock.tiles[t]) writableTile(stock, t);
+}
+
+function markDirty(stock: Stock, t: number) {
+  if (stock.dirty[t]) return;
+  stock.dirty[t] = 1;
+  stock.dirtyTiles.push(t);
+}
+
+/**
+ * The tiles whose meshes changed since the last call: every tile a cut
+ * wrote to, and the tiles before it whose meshes share a cut first row or
+ * column. Clears the list.
+ */
+export function takeDirtyTiles(stock: Stock): number[] {
+  const list = stock.dirtyTiles;
+  for (const t of list) stock.dirty[t] = 0;
+  stock.dirtyTiles = [];
+  return list;
 }
 
 /**
@@ -291,12 +319,18 @@ export function cutSegment(stock: Stock, from: Point3, to: Point3, bit: Bit): Di
       const current = stock.tiles[t];
       if (cut >= (current ? current[k] : 0)) continue;
       writableTile(stock, t)[k] = cut;
-      // Keep the flat top of an uncut neighbor from covering this cut edge.
+      markDirty(stock, t);
+      // The tiles before a first row or column show it too; allocating them
+      // keeps an uncut neighbor's flat top from covering this cut edge.
       const firstCol = (i & TILE_MASK) === 0 && i > 0;
       const firstRow = (j & TILE_MASK) === 0 && j > 0;
-      if (firstCol) ensureTile(stock, t - 1);
-      if (firstRow) ensureTile(stock, t - tx);
-      if (firstCol && firstRow) ensureTile(stock, t - tx - 1);
+      const before = (n: number) => {
+        ensureTile(stock, n);
+        markDirty(stock, n);
+      };
+      if (firstCol) before(t - 1);
+      if (firstRow) before(t - tx);
+      if (firstCol && firstRow) before(t - tx - 1);
     }
   }
   return { i0, j0, i1, j1 };
@@ -333,8 +367,12 @@ export function snapshotTiles(stock: Stock): (Float32Array | null)[] {
   return stock.tiles.slice();
 }
 
-/** Restores tiles from `snapshotTiles` (still shared with it), or to uncut stock with null. */
+/**
+ * Restores tiles from `snapshotTiles` (still shared with it), or to uncut
+ * stock with null. Clears the dirty list: everything needs redrawing.
+ */
 export function restoreTiles(stock: Stock, snapshot: (Float32Array | null)[] | null) {
+  takeDirtyTiles(stock);
   if (snapshot) {
     stock.tiles = snapshot.slice();
     stock.shared.fill(1);

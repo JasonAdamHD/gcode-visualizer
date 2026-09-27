@@ -21,6 +21,7 @@ import {
   restoreTiles,
   snapshotTiles,
   stockGrid,
+  takeDirtyTiles,
   tipOffset,
   touchedTiles,
 } from './stock';
@@ -146,6 +147,26 @@ describe('tiles', () => {
     const t = (j >> 6) * stock.tx;
     expect(stock.tiles[t + 1]).not.toBeNull();
     expect(stock.tiles[t]).not.toBeNull();
+  });
+
+  it('lists exactly the tiles a cut changed, plus those sharing a cut edge, once', () => {
+    const stock = createStock(sheet, flat);
+    cutSegment(stock, p(20, 30, -3), p(25, 30, -3), flat);
+    const first = takeDirtyTiles(stock);
+    expect(new Set(first).size).toBe(first.length);
+    // Every listed tile is allocated, and every allocated tile is listed.
+    const allocated = stock.tiles.flatMap((t, k) => (t ? [k] : []));
+    expect([...first].sort((a, b) => a - b)).toEqual(allocated);
+    expect(takeDirtyTiles(stock)).toEqual([]);
+    // Re-cutting the same groove changes nothing.
+    cutSegment(stock, p(20, 30, -3), p(25, 30, -3), flat);
+    expect(takeDirtyTiles(stock)).toEqual([]);
+    // A cut on column TILE also dirties the tile before it.
+    const x = TILE * stock.dx + (flat.diameter / 2) * (1 - 1e-9);
+    // y = 15 is exactly a grid row, so the boundary column is within reach there.
+    cutSegment(stock, p(x, 15, 1), p(x, 15, -2), flat);
+    const t = (Math.round(15 / stock.dy) >> 6) * stock.tx;
+    expect(takeDirtyTiles(stock).sort((a, b) => a - b)).toEqual([t, t + 1]);
   });
 
   it('shares tiles with a snapshot and copies them before writing', () => {

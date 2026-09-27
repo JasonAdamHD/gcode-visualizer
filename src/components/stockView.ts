@@ -8,6 +8,7 @@
 // sheet edge. Updates rewrite only the tiles a cut touched.
 import * as THREE from 'three';
 import type { DirtyRect, Stock } from '../sim/stock';
+import { takeDirtyTiles } from '../sim/stock';
 import type { Rgb } from '../sim/stockMesh';
 import {
   TILE_VERTS,
@@ -16,7 +17,6 @@ import {
   packedTileIndex,
   skirtIndex,
   skirtVertexCount,
-  tilesCovering,
   writeSkirt,
   writeTileVertices,
 } from '../sim/stockMesh';
@@ -79,9 +79,10 @@ export class StockView {
   }
 
   /**
-   * Shows the cut in `rect` (from the simulator). A rectangle covering the
-   * whole grid (a checkpoint restore) redraws everything, since tiles may
-   * have gone back to uncut.
+   * Shows what the simulator just cut: the stock's dirty tiles, with
+   * `rect` (the simulator's dirty rectangle) telling whether the skirt
+   * changed. A rectangle covering the whole grid (a checkpoint restore)
+   * redraws everything, since tiles may have gone back to uncut.
    */
   update(rect: DirtyRect | null) {
     if (!rect) return;
@@ -91,8 +92,7 @@ export class StockView {
       return;
     }
     let newTiles = false;
-    for (const t of tilesCovering(stock, rect)) {
-      if (!stock.tiles[t]) continue;
+    for (const t of takeDirtyTiles(stock)) {
       let slot = this.slotOf[t];
       if (slot < 0) {
         slot = this.assign(t);
@@ -113,6 +113,7 @@ export class StockView {
 
   /** Redraws every tile, the flat top and the skirt from the stock. */
   rebuild() {
+    takeDirtyTiles(this.stock);
     this.slotOf.fill(-1);
     this.slotTiles = [];
     for (const page of this.pages) page.mesh.geometry.setDrawRange(0, 0);
