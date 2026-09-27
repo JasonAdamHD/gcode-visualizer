@@ -12,6 +12,7 @@ import type { Drawing } from '../state/useDrawingState';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
 import type { Toolpath } from '../toolpath/toolpath';
+import { SheetGrid } from './SheetGrid';
 import './Workspace.css';
 import './Canvas.css';
 
@@ -137,17 +138,6 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, v
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [drawing]);
 
-  const gridLines = useMemo(() => {
-    const lines: { key: string; x1: number; y1: number; x2: number; y2: number }[] = [];
-    for (let x = 0; x <= sheetSize.x + 1e-6; x += gridSpacing) {
-      lines.push({ key: `v${x}`, x1: x, y1: 0, x2: x, y2: sheetSize.y });
-    }
-    for (let y = 0; y <= sheetSize.y + 1e-6; y += gridSpacing) {
-      lines.push({ key: `h${y}`, x1: 0, y1: y, x2: sheetSize.x, y2: y });
-    }
-    return lines;
-  }, [sheetSize, gridSpacing]);
-
   const strokeThin = gridSpacing * 0.01;
   const strokePath = gridSpacing * 0.05;
   const handleRadius = gridSpacing * 0.12;
@@ -202,19 +192,7 @@ export function Canvas({ drawing, sheet: sheetSize, units, toolpath, estimate, v
         onPointerLeave={() => setHover(null)}
       >
         <g transform={`translate(0 ${sheetSize.y}) scale(1 -1)`}>
-          <rect x={0} y={0} width={sheetSize.x} height={sheetSize.y} className="sheet" />
-
-          {gridLines.map((line) => (
-            <line
-              key={line.key}
-              x1={line.x1}
-              y1={line.y1}
-              x2={line.x2}
-              y2={line.y2}
-              className="grid-line"
-              strokeWidth={strokeThin}
-            />
-          ))}
+          <SheetGrid sheet={sheetSize} gridSpacing={gridSpacing} />
 
           {drawing.segments.length > 0 && (
             <path

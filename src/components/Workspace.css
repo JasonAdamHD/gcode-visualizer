@@ -105,6 +105,40 @@
   color: var(--accent);
 }
 
+.toolbar .legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  margin-left: 6px;
+  border-top: 2px solid;
+}
+
+.swatch:first-child {
+  margin-left: 0;
+}
+
+.swatch-feed {
+  border-color: var(--toolpath);
+}
+
+.swatch-vertical {
+  border-color: var(--accent);
+}
+
+.swatch-rapid {
+  border-top-style: dashed;
+  border-color: var(--text);
+}
+
 .hint {
   margin: 0;
   font-size: 13px;
