@@ -37,26 +37,27 @@ export type Stock = {
 /** Grid points a cut may have changed: `i0..i1` × `j0..j1`, inclusive. */
 export type DirtyRect = { i0: number; j0: number; i1: number; j1: number };
 
+/** A stock's grid layout without its heights. */
+export type StockGrid = Pick<Stock, 'nx' | 'ny' | 'dx' | 'dy' | 'coarsened'>;
+
 /**
- * An uncut stock for `sheet` (world units). The spacing aims for
- * `bit.diameter / CELLS_PER_DIAMETER` and is coarsened, uniformly in X and
- * Y, when that would exceed `MAX_CELLS` points.
+ * The grid `createStock` uses for `sheet` (world units). The spacing aims
+ * for `bit.diameter / CELLS_PER_DIAMETER` and is coarsened, uniformly in X
+ * and Y, when that would exceed `MAX_CELLS` points.
  */
-export function createStock(sheet: MachineParams['sheet'], bit: Bit): Stock {
+export function stockGrid(sheet: MachineParams['sheet'], bit: Bit): StockGrid {
   const fine = bit.diameter / CELLS_PER_DIAMETER;
   const capped = Math.sqrt((sheet.x * sheet.y) / MAX_CELLS);
   const cell = Math.max(fine, capped);
   const nx = Math.max(2, Math.ceil(sheet.x / cell) + 1);
   const ny = Math.max(2, Math.ceil(sheet.y / cell) + 1);
-  return {
-    nx,
-    ny,
-    dx: sheet.x / (nx - 1),
-    dy: sheet.y / (ny - 1),
-    floor: -sheet.thickness,
-    heights: new Float32Array(nx * ny),
-    coarsened: capped > fine,
-  };
+  return { nx, ny, dx: sheet.x / (nx - 1), dy: sheet.y / (ny - 1), coarsened: capped > fine };
+}
+
+/** An uncut stock for `sheet` on the grid from `stockGrid`. */
+export function createStock(sheet: MachineParams['sheet'], bit: Bit): Stock {
+  const grid = stockGrid(sheet, bit);
+  return { ...grid, floor: -sheet.thickness, heights: new Float32Array(grid.nx * grid.ny) };
 }
 
 /**

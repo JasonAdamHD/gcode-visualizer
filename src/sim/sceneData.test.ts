@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS } from '../machine/params';
 import type { Move, Point3 } from '../toolpath/moves';
 import { buildTimeline } from '../toolpath/timeline';
-import { bitProfile, moveLineBuffers, pathBuffer } from './sceneData';
+import { bitProfile, kindCounts, moveLineBuffers, pathBuffer } from './sceneData';
 
 const p = (x: number, y: number, z: number): Point3 => ({ x, y, z });
 
@@ -82,6 +82,42 @@ describe('pathBuffer', () => {
   it('holds the same pieces as the per-kind buffers combined', () => {
     const total = Object.values(moveLineBuffers(moves, DEFAULT_PARAMS)).reduce((sum, b) => sum + b.length, 0);
     expect(pathBuffer(moves, DEFAULT_PARAMS)).toHaveLength(total);
+  });
+});
+
+describe('kindCounts', () => {
+  const moves: Move[] = [
+    { kind: 'rapid', from: p(0, 0, 1), to: p(2, 0, 1) },
+    { kind: 'plunge', from: p(2, 0, 1), to: p(2, 0, -0.5) },
+    { kind: 'feed', from: p(2, 0, -0.5), to: p(0, 0, -0.5), bulge: 1 },
+    { kind: 'feed', from: p(0, 0, -0.5), to: p(0, 0, -0.5) },
+    { kind: 'retract', from: p(0, 0, -0.5), to: p(0, 0, 1) },
+    { kind: 'rapid', from: p(0, 0, 1), to: p(3, 0, 1) },
+  ];
+
+  it('counts each kind over the timeline blocks, ending at the per-kind buffer sizes', () => {
+    const counts = kindCounts(moves, DEFAULT_PARAMS);
+    const lines = moveLineBuffers(moves, DEFAULT_PARAMS);
+    const { blocks } = buildTimeline(moves, DEFAULT_PARAMS);
+    for (const kind of ['rapid', 'plunge', 'feed', 'retract'] as const) {
+      expect(counts[kind]).toHaveLength(blocks.length + 1);
+      expect(counts[kind][0]).toBe(0);
+      expect(counts[kind][blocks.length] * 6).toBe(lines[kind].length);
+    }
+    blocks.forEach((b, i) => {
+      const kind = moves[b.move].kind;
+      // Block i is piece counts[kind][i] of its kind's buffer.
+      const j = counts[kind][i];
+      expect(lines[kind][j * 6]).toBeCloseTo(b.from.x, 6);
+      expect(lines[kind][j * 6 + 2]).toBeCloseTo(b.from.z, 6);
+      expect(counts[kind][i + 1]).toBe(j + 1);
+    });
+    // The second rapid is the last block.
+    expect(counts.rapid[blocks.length - 1]).toBe(1);
+  });
+
+  it('is a single zero per kind for no moves', () => {
+    for (const c of Object.values(kindCounts([], DEFAULT_PARAMS))) expect(Array.from(c)).toEqual([0]);
   });
 });
 
