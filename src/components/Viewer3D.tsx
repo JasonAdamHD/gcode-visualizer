@@ -13,6 +13,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { MachineParams } from '../machine/params';
 import { unitFactor } from '../machine/params';
+import type { Bounds3, CameraPose, CameraPreset } from '../sim/camera';
+import { CAMERA_PRESETS, cameraPose, framePose, jobBounds, orthoHalfHeight } from '../sim/camera';
 import type { LayerKey, Layers } from '../sim/layers';
 import { kindLayer } from '../sim/layers';
 import { bitProfile, kindCounts, moveLineBuffers, pathBuffer } from '../sim/sceneData';
@@ -29,6 +31,7 @@ import { formatDuration } from '../toolpath/estimate';
 import type { Move } from '../toolpath/moves';
 import type { Timeline, TimelineSample } from '../toolpath/timeline';
 import type { Playback } from '../state/usePlayback';
+import { ignoreShortcut } from './keyboard';
 import { PlaybackBar } from './PlaybackBar';
 import './Workspace.css';
 import './Viewer3D.css';
@@ -74,6 +77,12 @@ const SIM_FRAME_MS = 6;
 const SIM_CHUNK = 50_000;
 
 const KINDS: MoveKind[] = ['rapid', 'plunge', 'feed', 'retract'];
+
+/** Vertical field of view of the perspective camera, in degrees. */
+const FOV = 45;
+
+/** Toolbar labels for the view presets; keys 1–4 pick them in this order. */
+const PRESET_LABELS: Record<CameraPreset, string> = { iso: 'Iso', top: 'Top', front: 'Front', right: 'Right' };
 
 /** The move-kind layers, shown as the toolbar legend. */
 const LEGEND: { key: 'cut' | 'vertical' | 'rapid'; swatch: string; label: string }[] = [
@@ -187,7 +196,10 @@ type JobParts = {
 type SceneState = {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
+  perspective: THREE.PerspectiveCamera;
+  ortho: THREE.OrthographicCamera;
+  /** Whichever of the two cameras is in use (and driven by the controls). */
+  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
   controls: OrbitControls;
   job: THREE.Group;
   parts: JobParts;
@@ -248,9 +260,11 @@ export default function Viewer3D({
     sun.position.set(-1, -2, 3);
     scene.add(sun);
 
-    const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
-    camera.up.set(0, 0, 1);
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const perspective = new THREE.PerspectiveCamera(FOV, 1, 0.01, 1000);
+    perspective.up.set(0, 0, 1);
+    const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1000);
+    ortho.up.set(0, 0, 1);
+    const controls = new OrbitControls(perspective, renderer.domElement);
     controls.zoomToCursor = true;
 
     const job = new THREE.Group();
@@ -276,7 +290,7 @@ export default function Viewer3D({
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        renderer.render(scene, camera);
+        renderer.render(scene, state.camera);
       });
     };
     controls.addEventListener('change', render);
@@ -285,18 +299,23 @@ export default function Viewer3D({
       const { clientWidth: w, clientHeight: h } = host;
       if (w === 0 || h === 0) return;
       renderer.setSize(w, h);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
+      perspective.aspect = w / h;
+      perspective.updateProjectionMatrix();
+      // The ortho view keeps its height and widens or narrows with the aspect.
+      const half = ortho.top;
+      ortho.left = -half * perspective.aspect;
+      ortho.right = half * perspective.aspect;
+      ortho.updateProjectionMatrix();
       render();
     };
     const observer = new ResizeObserver(resize);
-    observer.observe(host);
-    resize();
 
-    sceneRef.current = {
+    const state: SceneState = {
       renderer,
       scene,
-      camera,
+      perspective,
+      ortho,
+      camera: perspective,
       controls,
       job,
       parts: emptyParts(),
@@ -306,6 +325,9 @@ export default function Viewer3D({
       moveOverlay,
       render,
     };
+    sceneRef.current = state;
+    observer.observe(host);
+    resize();
     return () => {
       sceneRef.current = null;
       cancelAnimationFrame(frame);
@@ -324,23 +346,48 @@ export default function Viewer3D({
   const safeHeight = params.safeHeight;
   const bitParams = params.bit;
 
-  // Frames the sheet (and the space up to safe height) from the front left, above.
-  const resetView = useCallback(() => {
+  /**
+   * Moves the active camera to `pose`. Clip planes scale with the
+   * distance; the ortho view is sized to show what the perspective view
+   * would at the target.
+   */
+  const applyPose = useCallback((pose: CameraPose) => {
     const s = sceneRef.current;
     if (!s) return;
-    const target = new THREE.Vector3(sheetX / 2, sheetY / 2, (safeHeight - thickness) / 2);
-    const radius = 0.5 * Math.hypot(sheetX, sheetY, safeHeight + thickness);
-    // The oblique view foreshortens the sheet, so the bounding sphere can be framed a little tight.
-    const distance = (radius / Math.sin(THREE.MathUtils.degToRad(s.camera.fov / 2))) * 0.9;
-    const dir = new THREE.Vector3(-0.35, -1, 0.9).normalize();
-    s.camera.position.copy(target).addScaledVector(dir, distance);
-    s.camera.near = distance / 10000;
-    s.camera.far = distance * 20;
-    s.camera.updateProjectionMatrix();
-    s.controls.target.copy(target);
-    s.controls.update();
+    const { camera, controls } = s;
+    camera.position.set(pose.position.x, pose.position.y, pose.position.z);
+    camera.near = pose.distance / 10000;
+    camera.far = pose.distance * 20;
+    if (camera instanceof THREE.OrthographicCamera) {
+      const half = orthoHalfHeight(pose.distance, FOV);
+      camera.zoom = 1;
+      camera.top = half;
+      camera.bottom = -half;
+      camera.left = -half * s.perspective.aspect;
+      camera.right = half * s.perspective.aspect;
+    }
+    camera.updateProjectionMatrix();
+    controls.target.set(pose.target.x, pose.target.y, pose.target.z);
+    controls.update();
     s.render();
-  }, [sheetX, sheetY, thickness, safeHeight]);
+  }, []);
+
+  // The sheet and the space above it up to safe height.
+  const sheetBounds = useMemo<Bounds3>(
+    () => ({ min: { x: 0, y: 0, z: -thickness }, max: { x: sheetX, y: sheetY, z: safeHeight } }),
+    [sheetX, sheetY, thickness, safeHeight]
+  );
+
+  /** Frames the sheet from one of the presets. */
+  const viewPreset = useCallback(
+    (preset: CameraPreset) => {
+      const s = sceneRef.current;
+      if (s) applyPose(cameraPose(preset, sheetBounds, FOV, s.perspective.aspect));
+    },
+    [applyPose, sheetBounds]
+  );
+
+  const resetView = useCallback(() => viewPreset('iso'), [viewPreset]);
 
   // Reframe when the sheet changes (size or units), not on every job edit.
   useEffect(resetView, [resetView]);
@@ -425,6 +472,87 @@ export default function Viewer3D({
   }, [layers, lines, palette]);
 
   const path = useMemo(() => pathBuffer(moves, params), [moves, params]);
+
+  /** Frames the toolpath (or the sheet, with no moves) from the current viewing direction. */
+  const fitJob = useCallback(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const d = s.camera.position.clone().sub(s.controls.target);
+    // Rapids start from home, which would pull the frame towards the origin.
+    const bounds = jobBounds(lines.feed, lines.plunge, lines.retract) ?? jobBounds(path) ?? sheetBounds;
+    applyPose(framePose(d, bounds, FOV, s.perspective.aspect));
+  }, [applyPose, lines, path, sheetBounds]);
+
+  // Perspective or orthographic. Switching keeps the view direction and
+  // the scale at the target.
+  const [orthographic, setOrthographic] = useState(false);
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const { perspective, ortho, controls } = s;
+    const next = orthographic ? ortho : perspective;
+    if (s.camera === next) return;
+    const target = controls.target;
+    if (next === ortho) {
+      const distance = perspective.position.distanceTo(target);
+      const half = orthoHalfHeight(distance, FOV);
+      ortho.position.copy(perspective.position);
+      ortho.zoom = 1;
+      ortho.top = half;
+      ortho.bottom = -half;
+      ortho.left = -half * perspective.aspect;
+      ortho.right = half * perspective.aspect;
+      ortho.near = perspective.near;
+      ortho.far = perspective.far;
+      ortho.updateProjectionMatrix();
+    } else {
+      // Back far enough that the target area appears the same size.
+      const distance = ortho.top / ortho.zoom / orthoHalfHeight(1, FOV);
+      const dir = ortho.position.clone().sub(target).normalize();
+      perspective.position.copy(target).addScaledVector(dir, distance);
+      perspective.near = distance / 10000;
+      perspective.far = distance * 20;
+      perspective.updateProjectionMatrix();
+    }
+    s.camera = next;
+    controls.object = next;
+    controls.update();
+    s.render();
+  }, [orthographic]);
+
+  // Follow the bit: the view stays centered on it. Recentering (rather than
+  // adding the bit's movement) stays right when something else moves the
+  // camera at the same time, such as the reframe after a unit change.
+  const [follow, setFollow] = useState(false);
+  const followRef = useRef(follow);
+  /** Moves the camera and its target so the target is `point`, keeping the view direction and distance. */
+  const centerOn = useCallback((point: THREE.Vector3) => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const delta = point.clone().sub(s.controls.target);
+    if (delta.lengthSq() === 0) return;
+    s.camera.position.add(delta);
+    s.controls.target.add(delta);
+    s.controls.update();
+  }, []);
+  useEffect(() => {
+    followRef.current = follow;
+    const s = sceneRef.current;
+    if (follow && s) centerOn(s.bit.position);
+  }, [follow, centerOn]);
+
+  // View keys, only while the 3D view is shown: 1–4 pick a preset.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (ignoreShortcut(e) || e.shiftKey) return;
+      const preset = CAMERA_PRESETS[Number(e.key) - 1];
+      if (!preset) return;
+      e.preventDefault();
+      viewPreset(preset);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [viewPreset]);
 
   // The whole path in playback order, for the current-move highlight.
   useEffect(() => {
@@ -603,6 +731,7 @@ export default function Viewer3D({
     if (!s) return;
     const { position, block, kind } = sample;
     s.bit.position.set(position.x, position.y, position.z);
+    if (followRef.current) centerOn(s.bit.position);
     const played = Math.max(0, block);
     for (const k of KINDS) s.parts.traversed[k]?.geometry.setDrawRange(0, counts[k][played] * 2);
     const attr = s.current.geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -619,7 +748,7 @@ export default function Viewer3D({
     simulate();
     s.render();
     // `lines` and `palette` rebuild the traversed lines in (b), which start empty.
-  }, [sample, path, counts, lines, palette, layers, simulate]);
+  }, [sample, path, counts, lines, palette, layers, simulate, centerOn]);
 
   const status = [
     `${moves.length} move${moves.length === 1 ? '' : 's'}`,
@@ -633,8 +762,41 @@ export default function Viewer3D({
     <div className="canvas-workspace" ref={workspaceRef}>
       <div className="toolbar">
         {viewToggle}
-        <button type="button" onClick={resetView} disabled={webglError}>
-          Reset view
+        <span className="view-toggle" role="group" aria-label="View">
+          {CAMERA_PRESETS.map((preset, k) => (
+            <button
+              key={preset}
+              type="button"
+              title={`${PRESET_LABELS[preset]} view of the sheet (${k + 1})`}
+              onClick={() => viewPreset(preset)}
+              disabled={webglError}
+            >
+              {PRESET_LABELS[preset]}
+            </button>
+          ))}
+        </span>
+        <button type="button" onClick={fitJob} disabled={webglError} title="Frame the toolpath from the current direction">
+          Fit job
+        </button>
+        <button
+          type="button"
+          className="toggle"
+          aria-pressed={follow}
+          onClick={() => setFollow((f) => !f)}
+          disabled={webglError}
+          title="Keep the view centered on the bit while it moves"
+        >
+          Follow bit
+        </button>
+        <button
+          type="button"
+          className="toggle"
+          aria-pressed={orthographic}
+          onClick={() => setOrthographic((o) => !o)}
+          disabled={webglError}
+          title="Orthographic projection: no perspective, parallel lines stay parallel"
+        >
+          Ortho
         </button>
         <span className="divider" />
         <span className="legend">
@@ -669,7 +831,7 @@ export default function Viewer3D({
       </div>
       <PlaybackBar playback={playback} total={timeline.total} sample={sample} units={params.units} onStep={onStep} />
       <p className="hint">
-        Drag to orbit, right-drag (or Shift+drag) to pan, scroll to zoom. Space plays and pauses
+        Drag to orbit, right-drag (or Shift+drag) to pan, scroll to zoom; 1–4 pick a view. Space plays and pauses
         {onStep ? '; ← and → step through moves.' : '.'}
       </p>
     </div>

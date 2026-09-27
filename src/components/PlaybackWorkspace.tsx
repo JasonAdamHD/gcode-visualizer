@@ -11,6 +11,7 @@ import { usePlayback } from '../state/usePlayback';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import type { Move } from '../toolpath/moves';
 import { adjacentMoveTime, buildTimeline, moveBlockStarts, sampleTimeline } from '../toolpath/timeline';
+import { ignoreShortcut } from './keyboard';
 import { PlaybackBar } from './PlaybackBar';
 import { ProgramPane } from './ProgramPane';
 import { ProgramView } from './ProgramView';
@@ -37,14 +38,6 @@ type PlaybackWorkspaceProps = {
   /** The open program, or null when playing the drawing's moves (3D only). */
   program: WorkspaceProgram | null;
 };
-
-/** True when a key event is aimed at a control that uses it (typing, sliders, selects). */
-function isFormControl(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-  );
-}
 
 /**
  * Everything that follows the playback clock: the 3D view, the 2D program
@@ -94,7 +87,7 @@ export function PlaybackWorkspace({ view, viewToggle, moves, params, estimate, p
   const stepping = program !== null;
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || isFormControl(e.target)) return;
+      if (ignoreShortcut(e)) return;
       if (e.key === ' ') {
         // A focused button handles Space itself.
         if (e.target instanceof HTMLButtonElement) return;
