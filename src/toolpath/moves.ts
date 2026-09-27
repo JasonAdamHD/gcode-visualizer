@@ -12,17 +12,22 @@ export type Point3 = { x: number; y: number; z: number };
 
 /**
  * One machine motion. `rapid` and `retract` are G0 moves (`retract` only
- * moves up in Z); `plunge` is a feed-rate Z move down into material; `feed`
- * is a cutting move in XY at constant Z, an arc when `bulge` is non-zero
- * (DXF bulge convention, positive = CCW). This list is what the planner
- * times, what the 3D simulation will animate, and what later features (tabs,
- * lead-ins) will insert moves into.
+ * moves up in Z); `plunge` is a feed-rate Z move straight down; `feed` is
+ * any other cutting move, an arc in XY when `bulge` is non-zero (DXF bulge
+ * convention, positive = CCW, Z interpolated along the arc for a helix).
+ * Moves built from a drawing keep `feed` at constant Z; imported G-code
+ * can feed in 3D. This list is what the planner times, what the 3D view
+ * animates, and what the G-code parser produces.
  */
 export type Move = {
   kind: 'rapid' | 'plunge' | 'feed' | 'retract';
   from: Point3;
   to: Point3;
   bulge?: number;
+  /** 0-based line in the source G-code file, for imported moves. */
+  sourceLine?: number;
+  /** Programmed feed rate in units/min (an imported F word); overrides the params' feed or plunge rate. */
+  feedRate?: number;
 };
 
 /** Height above the current material surface where a rapid lower stops and the plunge starts, in inches. */
