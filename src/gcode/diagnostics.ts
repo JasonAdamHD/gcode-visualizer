@@ -20,7 +20,11 @@ export type DiagnosticCode =
   | 'arc-full-circle-r'
   | 'arc-plane'
   | 'unit-change'
-  | 'no-units';
+  | 'no-units'
+  | 'rapid-into-material'
+  | 'too-deep'
+  | 'out-of-bounds'
+  | 'no-cut';
 
 /** A problem found in a G-code file. `line` is 0-based, like `Move.sourceLine`; the UI shows it 1-based. */
 export type Diagnostic = {
