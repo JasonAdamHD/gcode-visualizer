@@ -13,8 +13,17 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { MachineParams } from '../machine/params';
 import { unitFactor } from '../machine/params';
-import { bitProfile, moveLineBuffers, pathBuffer } from '../sim/sceneData';
+import type { LayerKey, Layers } from '../sim/layers';
+import { kindLayer } from '../sim/layers';
+import { bitProfile, kindCounts, moveLineBuffers, pathBuffer } from '../sim/sceneData';
 import type { MoveKind } from '../sim/sceneData';
+import type { DirtyRect, Stock } from '../sim/stock';
+import { createStock, stockGrid } from '../sim/stock';
+import type { Rgb } from '../sim/stockMesh';
+import { gridIndex, skirtIndex, skirtVertexCount, surfacePositions, writeSkirt, writeSurfaceRows } from '../sim/stockMesh';
+import type { CutTarget } from '../sim/stockSim';
+import { StockSimulator } from '../sim/stockSim';
+import { useLayers } from '../state/useLayers';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
 import type { Move } from '../toolpath/moves';
@@ -48,6 +57,8 @@ type Palette = {
   edge: string;
   sheet: string;
   spoilboard: string;
+  stock: string;
+  stockCut: string;
   bit: string;
   traversed: string;
   current: string;
@@ -57,6 +68,27 @@ type Palette = {
 const SPOILBOARD_IN = 0.75;
 /** Visible bit length above the tip, in bit diameters. */
 const BIT_LENGTH_DIAMETERS = 4;
+/** Stock simulation time per animation frame, in ms; the rest of the frame is left for rendering. */
+const SIM_FRAME_MS = 6;
+/** Work units (grid points) per `advanceTo` call, so the frame budget is checked often. */
+const SIM_CHUNK = 50_000;
+
+const KINDS: MoveKind[] = ['rapid', 'plunge', 'feed', 'retract'];
+
+/** The move-kind layers, shown as the toolbar legend. */
+const LEGEND: { key: 'cut' | 'vertical' | 'rapid'; swatch: string; label: string }[] = [
+  { key: 'cut', swatch: 'swatch-feed', label: 'cut' },
+  { key: 'vertical', swatch: 'swatch-vertical', label: 'plunge/retract' },
+  { key: 'rapid', swatch: 'swatch-rapid', label: 'rapid' },
+];
+
+/** The other layers, in the Layers menu. */
+const MENU_LAYERS: { key: LayerKey; label: string }[] = [
+  { key: 'stock', label: 'Stock (material removal)' },
+  { key: 'sheet', label: 'Sheet and spoilboard' },
+  { key: 'untraversed', label: 'Path not played yet' },
+  { key: 'axes', label: 'Axes' },
+];
 
 /** True when the browser can create a WebGL context (it may be disabled or unsupported). */
 function webglAvailable(): boolean {
@@ -81,6 +113,8 @@ function readPalette(el: HTMLElement): Palette {
     edge: v('--text-h', '#08060d'),
     sheet: v('--sheet-3d', '#d8c3a0'),
     spoilboard: v('--spoilboard-3d', '#9c8b70'),
+    stock: v('--stock-3d', '#e2cfae'),
+    stockCut: v('--stock-cut-3d', '#b89468'),
     bit: v('--text', '#6b6375'),
     traversed: v('--traversed-3d', '#d97706'),
     current: v('--current-move', '#e11d48'),
@@ -100,6 +134,12 @@ function usePalette(ref: RefObject<HTMLElement | null>): Palette | null {
     return () => media.removeEventListener('change', update);
   }, [ref]);
   return palette;
+}
+
+/** A CSS color as vertex-color bytes (linear, as Three.js expects vertex colors). */
+function toRgb(css: string): Rgb {
+  const c = new THREE.Color(css);
+  return [Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)];
 }
 
 /** Disposes every geometry and material under `root` and empties it. */
@@ -131,21 +171,48 @@ function slab(width: number, depth: number, bottom: number, top: number, color: 
   return group;
 }
 
+type Line = THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+
+/** The parts of the job group that layers show and hide; rebuilt with the job. */
+type JobParts = {
+  sheet: THREE.Object3D | null;
+  spoilboard: THREE.Object3D | null;
+  axes: THREE.Object3D | null;
+  /** The whole path per kind. */
+  lines: Partial<Record<MoveKind, Line>>;
+  /** The played path per kind: the same buffers, drawn up to the current block. */
+  traversed: Partial<Record<MoveKind, Line>>;
+};
+
 type SceneState = {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   job: THREE.Group;
+  parts: JobParts;
+  /** Holds the stock surface and skirt. */
+  stockGroup: THREE.Group;
   bit: THREE.Mesh;
-  /** The path already played, drawn over the job lines up to the current block. */
-  traversed: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   /** The played part of the current block, from its start to the bit. */
-  current: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  current: Line;
   /** The whole current move (step-through), a draw range over the path buffer. */
-  moveOverlay: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  moveOverlay: Line;
   render: () => void;
 };
+
+/** The simulated stock and the buffers that draw it. */
+type StockState = {
+  stock: Stock;
+  sim: StockSimulator;
+  surface: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>;
+  skirt: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>;
+  positions: THREE.BufferAttribute;
+  colors: THREE.BufferAttribute;
+  skirtPositions: THREE.BufferAttribute;
+};
+
+const emptyParts = (): JobParts => ({ sheet: null, spoilboard: null, axes: null, lines: {}, traversed: {} });
 
 export default function Viewer3D({
   moves,
@@ -163,6 +230,7 @@ export default function Viewer3D({
   const sceneRef = useRef<SceneState | null>(null);
   const [webglError] = useState(() => !webglAvailable());
   const palette = usePalette(workspaceRef);
+  const [layers, toggleLayer] = useLayers();
 
   // (a) Renderer, camera, controls and lights, for the component's lifetime.
   useEffect(() => {
@@ -186,22 +254,22 @@ export default function Viewer3D({
     controls.zoomToCursor = true;
 
     const job = new THREE.Group();
+    const stockGroup = new THREE.Group();
     const bit = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial());
     bit.rotation.x = Math.PI / 2; // Lathe axis is +Y; turn it to +Z.
     // Drawn after the job lines so the highlight wins where they coincide.
-    const overlay = () => {
+    const overlay = (): Line => {
       const line = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial());
       line.renderOrder = 1;
       line.frustumCulled = false;
       return line;
     };
-    const traversed = overlay();
     const current = overlay();
     current.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
     const moveOverlay = overlay();
     moveOverlay.renderOrder = 2;
     moveOverlay.visible = false;
-    scene.add(job, bit, traversed, current, moveOverlay);
+    scene.add(job, stockGroup, bit, current, moveOverlay);
 
     let frame = 0;
     const render = () => {
@@ -225,7 +293,19 @@ export default function Viewer3D({
     observer.observe(host);
     resize();
 
-    sceneRef.current = { renderer, scene, camera, controls, job, bit, traversed, current, moveOverlay, render };
+    sceneRef.current = {
+      renderer,
+      scene,
+      camera,
+      controls,
+      job,
+      parts: emptyParts(),
+      stockGroup,
+      bit,
+      current,
+      moveOverlay,
+      render,
+    };
     return () => {
       sceneRef.current = null;
       cancelAnimationFrame(frame);
@@ -242,6 +322,7 @@ export default function Viewer3D({
   const sheetY = params.sheet.y;
   const thickness = params.sheet.thickness;
   const safeHeight = params.safeHeight;
+  const bitParams = params.bit;
 
   // Frames the sheet (and the space up to safe height) from the front left, above.
   const resetView = useCallback(() => {
@@ -265,19 +346,21 @@ export default function Viewer3D({
   useEffect(resetView, [resetView]);
 
   const lines = useMemo(() => moveLineBuffers(moves, params), [moves, params]);
+  const counts = useMemo(() => kindCounts(moves, params), [moves, params]);
 
-  // (b) Sheet, spoilboard, toolpath lines and the bit shape.
+  // (b) Sheet, spoilboard, axes, toolpath lines (whole and played, per
+  // kind) and the bit shape.
   useEffect(() => {
     const s = sceneRef.current;
     if (!s || !palette) return;
     clearGroup(s.job);
+    const parts = emptyParts();
 
     const spoil = SPOILBOARD_IN * unitFactor('in', params.units);
-    s.job.add(slab(sheetX, sheetY, -thickness, 0, palette.sheet, palette.edge, 0.45));
-    s.job.add(slab(sheetX, sheetY, -thickness - spoil, -thickness, palette.spoilboard, palette.edge, 0.25));
-
-    const axes = new THREE.AxesHelper(0.08 * Math.max(sheetX, sheetY));
-    s.job.add(axes);
+    parts.sheet = slab(sheetX, sheetY, -thickness, 0, palette.sheet, palette.edge, 0.45);
+    parts.spoilboard = slab(sheetX, sheetY, -thickness - spoil, -thickness, palette.spoilboard, palette.edge, 0.25);
+    parts.axes = new THREE.AxesHelper(0.08 * Math.max(sheetX, sheetY));
+    s.job.add(parts.sheet, parts.spoilboard, parts.axes);
 
     const dash = 0.006 * Math.max(sheetX, sheetY);
     const materials: Record<MoveKind, THREE.LineBasicMaterial> = {
@@ -286,46 +369,70 @@ export default function Viewer3D({
       retract: new THREE.LineBasicMaterial({ color: palette.vertical }),
       feed: new THREE.LineBasicMaterial({ color: palette.feed }),
     };
-    for (const kind of Object.keys(materials) as MoveKind[]) {
+    for (const kind of KINDS) {
       if (lines[kind].length === 0) {
         materials[kind].dispose();
         continue;
       }
+      const attribute = new THREE.BufferAttribute(lines[kind], 3);
       const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.BufferAttribute(lines[kind], 3));
+      geometry.setAttribute('position', attribute);
       const segments = new THREE.LineSegments(geometry, materials[kind]);
       if (kind === 'rapid') segments.computeLineDistances();
-      s.job.add(segments);
+      // The played path shares the buffer; only its draw range changes in (c).
+      const played = new THREE.BufferGeometry();
+      played.setAttribute('position', attribute);
+      played.setDrawRange(0, 0);
+      const traversed = new THREE.LineSegments(played, new THREE.LineBasicMaterial({ color: palette.traversed }));
+      traversed.renderOrder = 1;
+      traversed.frustumCulled = false;
+      parts.lines[kind] = segments;
+      parts.traversed[kind] = traversed;
+      s.job.add(segments, traversed);
     }
+    s.parts = parts;
 
     s.bit.geometry.dispose();
-    const profile = bitProfile(params.bit.shape, params.bit.diameter, BIT_LENGTH_DIAMETERS * params.bit.diameter);
+    const profile = bitProfile(bitParams.shape, bitParams.diameter, BIT_LENGTH_DIAMETERS * bitParams.diameter);
     s.bit.geometry = new THREE.LatheGeometry(
       profile.map((q) => new THREE.Vector2(q.x, q.y)),
       32
     );
     (s.bit.material as THREE.MeshLambertMaterial).color.set(palette.bit);
-    s.traversed.material.color.set(palette.traversed);
     s.current.material.color.set(palette.traversed);
     s.moveOverlay.material.color.set(palette.current);
     s.render();
-  }, [lines, palette, sheetX, sheetY, thickness, params.units, params.bit]);
+  }, [lines, palette, sheetX, sheetY, thickness, params.units, bitParams]);
 
-  const path = useMemo(() => pathBuffer(moves, params), [moves, params]);
-
-  // The whole path in playback order, revealed block by block in (c).
+  // Layers only toggle `visible`; nothing is rebuilt. The sheet's slab
+  // gives way to the stock while the stock is shown.
   useEffect(() => {
     const s = sceneRef.current;
     if (!s) return;
-    s.traversed.geometry.dispose();
-    s.traversed.geometry = new THREE.BufferGeometry();
-    const attribute = new THREE.BufferAttribute(path, 3);
-    s.traversed.geometry.setAttribute('position', attribute);
-    s.traversed.geometry.setDrawRange(0, 0);
-    // Shares the path's buffer; only its draw range changes when stepping.
+    const { parts } = s;
+    if (parts.sheet) parts.sheet.visible = layers.sheet && !layers.stock;
+    if (parts.spoilboard) parts.spoilboard.visible = layers.sheet;
+    if (parts.axes) parts.axes.visible = layers.axes;
+    for (const kind of KINDS) {
+      const on = layers[kindLayer(kind)];
+      const whole = parts.lines[kind];
+      const played = parts.traversed[kind];
+      if (whole) whole.visible = on && layers.untraversed;
+      if (played) played.visible = on;
+    }
+    s.stockGroup.visible = layers.stock;
+    s.render();
+  }, [layers, lines, palette]);
+
+  const path = useMemo(() => pathBuffer(moves, params), [moves, params]);
+
+  // The whole path in playback order, for the current-move highlight.
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
     s.moveOverlay.geometry.dispose();
     s.moveOverlay.geometry = new THREE.BufferGeometry();
-    s.moveOverlay.geometry.setAttribute('position', attribute);
+    s.moveOverlay.geometry.setAttribute('position', new THREE.BufferAttribute(path, 3));
     s.moveOverlay.geometry.setDrawRange(0, 0);
     s.render();
   }, [path]);
@@ -339,14 +446,165 @@ export default function Viewer3D({
     s.render();
   }, [currentMove, path]);
 
-  // (c) Bit position and the played part of the path. Only moves things and
-  // sets a draw range, so it is cheap enough to run every frame.
+  // Stock simulation. The simulator cuts towards `targetRef` in slices of
+  // SIM_FRAME_MS per animation frame, so a long jump never freezes the
+  // page; `simProgress` is shown while it is behind.
+  const stockRef = useRef<StockState | null>(null);
+  const targetRef = useRef<CutTarget | null>(null);
+  const simFrameRef = useRef(0);
+  const paletteRef = useRef(palette);
+  const layersRef = useRef(layers);
+  const [simProgress, setSimProgress] = useState<number | null>(null);
+
+  const stockColors = useCallback(() => {
+    const p = paletteRef.current;
+    return p ? { top: toRgb(p.stock), cut: toRgb(p.stockCut) } : { top: toRgb('#e2cfae'), cut: toRgb('#b89468') };
+  }, []);
+
+  /** Uploads the rows of `rect` (and the skirt, if the cut reached an edge). */
+  const flushStock = useCallback(
+    (st: StockState, rect: DirtyRect | null) => {
+      if (!rect) return;
+      const { stock } = st;
+      const { start, count } = writeSurfaceRows(
+        stock,
+        st.positions.array as Float32Array,
+        { data: st.colors.array as Uint8Array, ...stockColors() },
+        rect.j0,
+        rect.j1
+      );
+      for (const attr of [st.positions, st.colors]) {
+        attr.addUpdateRange(start, count);
+        attr.needsUpdate = true;
+      }
+      if (rect.i0 === 0 || rect.j0 === 0 || rect.i1 === stock.nx - 1 || rect.j1 === stock.ny - 1) {
+        writeSkirt(stock, st.skirtPositions.array as Float32Array);
+        st.skirtPositions.needsUpdate = true;
+      }
+    },
+    [stockColors]
+  );
+
+  const simulateSlice = useCallback(
+    function slice() {
+      simFrameRef.current = 0;
+      const st = stockRef.current;
+      const s = sceneRef.current;
+      const target = targetRef.current;
+      if (!st || !s || !target || !layersRef.current.stock) return;
+      const start = performance.now();
+      let result;
+      do {
+        result = st.sim.advanceTo(target, SIM_CHUNK);
+        flushStock(st, result.dirty);
+      } while (!result.done && performance.now() - start < SIM_FRAME_MS);
+      s.render();
+      if (result.done) {
+        setSimProgress(null);
+      } else {
+        setSimProgress(Math.floor(result.progress * 100));
+        simFrameRef.current = requestAnimationFrame(slice);
+      }
+    },
+    [flushStock]
+  );
+
+  /** Catches the stock up with `targetRef` now, unless a slice is already queued for this frame. */
+  const simulate = useCallback(() => {
+    if (!simFrameRef.current) simulateSlice();
+  }, [simulateSlice]);
+
+  const grid = useMemo(
+    () => stockGrid({ x: sheetX, y: sheetY, thickness }, bitParams),
+    [sheetX, sheetY, thickness, bitParams]
+  );
+
+  // (d) A fresh stock whenever the job, sheet or bit change.
   useEffect(() => {
     const s = sceneRef.current;
     if (!s) return;
-    const { position, block } = sample;
+    const stock = createStock({ x: sheetX, y: sheetY, thickness }, bitParams);
+    const sim = new StockSimulator(timeline, stock, bitParams);
+
+    const positions = new THREE.BufferAttribute(surfacePositions(stock), 3);
+    const colors = new THREE.BufferAttribute(new Uint8Array(stock.nx * stock.ny * 3), 3, true);
+    writeSurfaceRows(stock, positions.array as Float32Array, { data: colors.array as Uint8Array, ...stockColors() }, 0, stock.ny - 1);
+    positions.setUsage(THREE.DynamicDrawUsage);
+    colors.setUsage(THREE.DynamicDrawUsage);
+    const surfaceGeometry = new THREE.BufferGeometry();
+    surfaceGeometry.setAttribute('position', positions);
+    surfaceGeometry.setAttribute('color', colors);
+    surfaceGeometry.setIndex(new THREE.BufferAttribute(gridIndex(stock.nx, stock.ny), 1));
+    // Pushed back a little so toolpath lines lying on a cut floor stay visible.
+    const material = () =>
+      new THREE.MeshLambertMaterial({ flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+    const surfaceMaterial = material();
+    surfaceMaterial.vertexColors = true;
+    const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
+    // Heights only go down inside the sheet's box; skip bounds over a million vertices.
+    surface.frustumCulled = false;
+
+    const skirtPositions = new THREE.BufferAttribute(new Float32Array(skirtVertexCount(stock) * 3), 3);
+    writeSkirt(stock, skirtPositions.array as Float32Array);
+    skirtPositions.setUsage(THREE.DynamicDrawUsage);
+    const skirtGeometry = new THREE.BufferGeometry();
+    skirtGeometry.setAttribute('position', skirtPositions);
+    skirtGeometry.setIndex(new THREE.BufferAttribute(skirtIndex(stock), 1));
+    const skirtMaterial = material();
+    skirtMaterial.color.set(paletteRef.current?.stock ?? '#e2cfae');
+    const skirt = new THREE.Mesh(skirtGeometry, skirtMaterial);
+    skirt.frustumCulled = false;
+
+    s.stockGroup.add(surface, skirt);
+    stockRef.current = { stock, sim, surface, skirt, positions, colors, skirtPositions };
+    simulate();
+    return () => {
+      cancelAnimationFrame(simFrameRef.current);
+      simFrameRef.current = 0;
+      stockRef.current = null;
+      // The old target belongs to the old timeline; (c) sets the next one.
+      targetRef.current = null;
+      clearGroup(s.stockGroup);
+      // On unmount (a) has already disposed the renderer; only redraw a live scene.
+      if (sceneRef.current === s) s.render();
+    };
+  }, [timeline, sheetX, sheetY, thickness, bitParams, stockColors, simulate]);
+
+  // Recolor the stock for a new color scheme.
+  useEffect(() => {
+    paletteRef.current = palette;
+    const st = stockRef.current;
+    const s = sceneRef.current;
+    if (!st || !s || !palette) return;
+    writeSurfaceRows(st.stock, st.positions.array as Float32Array, { data: st.colors.array as Uint8Array, ...stockColors() }, 0, st.stock.ny - 1);
+    // Ranges queued by a simulation slice would limit the upload to their rows.
+    st.colors.clearUpdateRanges();
+    st.colors.needsUpdate = true;
+    st.skirt.material.color.set(palette.stock);
+    s.render();
+  }, [palette, stockColors]);
+
+  // Showing the stock again catches it up; hiding it stops the work.
+  useEffect(() => {
+    layersRef.current = layers;
+    if (layers.stock) {
+      simulate();
+    } else {
+      cancelAnimationFrame(simFrameRef.current);
+      simFrameRef.current = 0;
+    }
+  }, [layers, simulate]);
+
+  // (c) Bit position, the played part of the path and the stock's target.
+  // Only moves things and sets draw ranges, so it is cheap enough to run
+  // every frame.
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const { position, block, kind } = sample;
     s.bit.position.set(position.x, position.y, position.z);
-    s.traversed.geometry.setDrawRange(0, Math.max(0, block) * 2);
+    const played = Math.max(0, block);
+    for (const k of KINDS) s.parts.traversed[k]?.geometry.setDrawRange(0, counts[k][played] * 2);
     const attr = s.current.geometry.getAttribute('position') as THREE.BufferAttribute;
     if (block >= 0) {
       attr.setXYZ(0, path[block * 6], path[block * 6 + 1], path[block * 6 + 2]);
@@ -356,9 +614,20 @@ export default function Viewer3D({
       attr.setXYZ(1, 0, 0, 0);
     }
     attr.needsUpdate = true;
+    s.current.visible = kind !== null && layers[kindLayer(kind)];
+    targetRef.current = { block, position };
+    simulate();
     s.render();
-  }, [sample, path]);
+    // `lines` and `palette` rebuild the traversed lines in (b), which start empty.
+  }, [sample, path, counts, lines, palette, layers, simulate]);
 
+  const status = [
+    `${moves.length} move${moves.length === 1 ? '' : 's'}`,
+    estimate.total > 0 ? `est. ${formatDuration(estimate.total)}` : null,
+    simProgress !== null && layers.stock ? `Simulating… ${simProgress} %` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <div className="canvas-workspace" ref={workspaceRef}>
@@ -369,13 +638,30 @@ export default function Viewer3D({
         </button>
         <span className="divider" />
         <span className="legend">
-          <span className="swatch swatch-feed" /> cut
-          <span className="swatch swatch-vertical" /> plunge/retract
-          <span className="swatch swatch-rapid" /> rapid
+          {LEGEND.map(({ key, swatch, label }) => (
+            <button
+              key={key}
+              type="button"
+              className="legend-toggle"
+              aria-pressed={layers[key]}
+              title={`${layers[key] ? 'Hide' : 'Show'} ${label} moves`}
+              onClick={() => toggleLayer(key)}
+            >
+              <span className={`swatch ${swatch}`} /> {label}
+            </button>
+          ))}
         </span>
+        <LayersMenu layers={layers} onToggle={toggleLayer} />
         <span className="status">
-          {moves.length} move{moves.length === 1 ? '' : 's'}
-          {estimate.total > 0 && ` · est. ${formatDuration(estimate.total)}`}
+          {status}
+          {grid.coarsened && layers.stock && (
+            <span
+              className="stock-note"
+              title="The sheet is large for this bit, so the stock grid is coarser than 1/8 of the bit diameter. Small details of the cut may look blocky."
+            >
+              {' · '}stock grid {formatSpacing(Math.max(grid.dx, grid.dy))} {params.units}
+            </span>
+          )}
         </span>
       </div>
       <div className="viewer-3d" ref={hostRef}>
@@ -387,5 +673,26 @@ export default function Viewer3D({
         {onStep ? '; ← and → step through moves.' : '.'}
       </p>
     </div>
+  );
+}
+
+/** A grid spacing with three significant digits. */
+function formatSpacing(value: number): string {
+  return Number(value.toPrecision(3)).toString();
+}
+
+/** The layers that are not move kinds, as a dropdown of checkboxes. */
+function LayersMenu({ layers, onToggle }: { layers: Layers; onToggle: (key: LayerKey) => void }) {
+  return (
+    <details className="layers-menu">
+      <summary>Layers</summary>
+      <div className="layers-popup">
+        {MENU_LAYERS.map(({ key, label }) => (
+          <label key={key}>
+            <input type="checkbox" checked={layers[key]} onChange={() => onToggle(key)} /> {label}
+          </label>
+        ))}
+      </div>
+    </details>
   );
 }

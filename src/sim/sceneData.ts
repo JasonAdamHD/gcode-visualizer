@@ -57,6 +57,32 @@ export function pathBuffer(moves: Move[], params: MachineParams): Float32Array {
   return out;
 }
 
+/** Per move kind, a running count of that kind's blocks: `counts[kind][i]` of the first `i` blocks are `kind` (length blocks + 1). */
+export type KindCounts = Record<MoveKind, Uint32Array>;
+
+/**
+ * Running counts of blocks per move kind, in playback order. Piece `j` of
+ * `moveLineBuffers(...)[kind]` is that kind's `j`-th block, so drawing the
+ * first `counts[kind][i]` pieces of each kind shows the path before
+ * timeline block `i`, kind by kind.
+ */
+export function kindCounts(moves: Move[], params: MachineParams): KindCounts {
+  const blocks = linearize(moves, params);
+  const n = blocks.length;
+  const counts: KindCounts = {
+    rapid: new Uint32Array(n + 1),
+    plunge: new Uint32Array(n + 1),
+    feed: new Uint32Array(n + 1),
+    retract: new Uint32Array(n + 1),
+  };
+  const kinds = Object.keys(counts) as MoveKind[];
+  blocks.forEach((b, i) => {
+    const kind = moves[b.move].kind;
+    for (const k of kinds) counts[k][i + 1] = counts[k][i] + (k === kind ? 1 : 0);
+  });
+  return counts;
+}
+
 /** Quarter-circle steps used to outline a ball-nose tip. */
 const BALL_STEPS = 12;
 
