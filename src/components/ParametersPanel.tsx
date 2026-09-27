@@ -4,6 +4,7 @@
 
 import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import type { Diagnostic } from '../gcode/diagnostics';
 import type { BitKind, BitShape, FieldKey, MachineParams, Units } from '../machine/params';
 import { displayDecimals, formatNumber, parseParams, serializeParams, validateParams } from '../machine/params';
 import type { CutTimeEstimate } from '../toolpath/estimate';
@@ -11,11 +12,24 @@ import { formatDuration } from '../toolpath/estimate';
 import { passDepths } from '../toolpath/moves';
 import type { CutSide } from '../toolpath/offset';
 import type { Toolpath } from '../toolpath/toolpath';
+import { DiagnosticsList } from './DiagnosticsList';
 import { NumberField } from './NumberField';
 import './ParametersPanel.css';
 
+/** What the panel shows about an open G-code program. */
+export type ProgramSummary = {
+  fileName: string;
+  /** The file's own units (the program is shown in the current units). */
+  units: Units;
+  lineCount: number;
+  moveCount: number;
+  diagnostics: Diagnostic[];
+};
+
 type ParametersPanelProps = {
   params: MachineParams;
+  /** The open G-code program, or null while showing the drawing. */
+  program: ProgramSummary | null;
   update: (updater: (prev: MachineParams) => MachineParams) => void;
   toolpath: Toolpath;
   estimate: CutTimeEstimate;
@@ -61,6 +75,7 @@ function shapeFor(kind: BitKind, current: BitShape): BitShape {
 /** Sidebar for editing machine/job parameters. */
 export function ParametersPanel({
   params,
+  program,
   update,
   toolpath,
   estimate,
@@ -159,6 +174,25 @@ export function ParametersPanel({
         </button>
       </div>
 
+      {program && (
+        <fieldset>
+          <legend>Program</legend>
+          <p className="derived">
+            File <output className="program-file">{program.fileName}</output>
+          </p>
+          <p className="derived">
+            Lines <output>{program.lineCount}</output>
+          </p>
+          <p className="derived">
+            Moves <output>{program.moveCount}</output>
+          </p>
+          <p className="derived">
+            File units <output>{program.units}</output>
+          </p>
+          <DiagnosticsList diagnostics={program.diagnostics} />
+        </fieldset>
+      )}
+
       <fieldset>
         <legend>Units</legend>
         <div className="segmented" role="group" aria-label="Units">
@@ -224,6 +258,11 @@ export function ParametersPanel({
         {field('plungeRate', 'Plunge rate', params.plungeRate, (p, plungeRate) => ({ ...p, plungeRate }), rate)}
         {field('rapidRateXY', 'Rapid XY', params.rapidRateXY, (p, rapidRateXY) => ({ ...p, rapidRateXY }), rate)}
         {field('rapidRateZ', 'Rapid Z', params.rapidRateZ, (p, rapidRateZ) => ({ ...p, rapidRateZ }), rate)}
+        {program && (
+          <p className="derived note">
+            The program's F words set its feed and plunge rates; these two apply only to cuts before the first F.
+          </p>
+        )}
       </fieldset>
 
       <fieldset>
@@ -234,16 +273,19 @@ export function ParametersPanel({
           params.spoilboardPenetration,
           (p, spoilboardPenetration) => ({ ...p, spoilboardPenetration })
         )}
-        {field('depthPerPass', 'Depth per pass', params.depthPerPass, (p, depthPerPass) => ({ ...p, depthPerPass }))}
+        {!program &&
+          field('depthPerPass', 'Depth per pass', params.depthPerPass, (p, depthPerPass) => ({ ...p, depthPerPass }))}
         <p className="derived">
-          Total cut depth{' '}
+          {program ? 'Deepest allowed' : 'Total cut depth'}{' '}
           <output>
             {formatNumber(totalDepth, decimals)} {units}
           </output>
         </p>
-        <p className="derived">
-          Passes <output>{passCount}</output>
-        </p>
+        {!program && (
+          <p className="derived">
+            Passes <output>{passCount}</output>
+          </p>
+        )}
       </fieldset>
 
       <fieldset>
@@ -267,6 +309,7 @@ export function ParametersPanel({
         )}
       </fieldset>
 
+      {!program && (
       <fieldset>
         <legend>Toolpath</legend>
         <div className="segmented" role="group" aria-label="Cut side">
@@ -294,6 +337,7 @@ export function ParametersPanel({
           </p>
         ))}
       </fieldset>
+      )}
 
       <fieldset>
         <legend>Estimate</legend>
@@ -314,9 +358,11 @@ export function ParametersPanel({
             <p className="derived" title="Time lost to acceleration and corner slowdowns; already included above">
               incl. accel &amp; corner loss <output>{formatDuration(estimate.cornerLoss)}</output>
             </p>
-            <p className="derived">
-              Passes <output>{estimate.passes}</output>
-            </p>
+            {!program && (
+              <p className="derived">
+                Passes <output>{estimate.passes}</output>
+              </p>
+            )}
             <p className="derived">
               Cut length{' '}
               <output>
@@ -325,7 +371,9 @@ export function ParametersPanel({
             </p>
           </>
         ) : (
-          <p className="derived">Draw a path to estimate the cut time.</p>
+          <p className="derived">
+            {program ? 'The program has no moves.' : 'Draw a path to estimate the cut time.'}
+          </p>
         )}
       </fieldset>
 

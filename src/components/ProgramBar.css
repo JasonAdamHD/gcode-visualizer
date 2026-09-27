@@ -1,0 +1,68 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+.program-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.program-bar button {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.program-bar button:hover {
+  border-color: var(--accent-border);
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-size: 13px;
+}
+
+.file-chip .file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.program-bar .file-chip button {
+  padding: 0 6px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.program-bar .file-chip button:hover {
+  color: var(--text-h);
+}
+
+.program-error {
+  font-size: 13px;
+  color: #d93a3a;
+}
+
+@media (prefers-color-scheme: dark) {
+  .program-error {
+    color: #f87171;
+  }
+}

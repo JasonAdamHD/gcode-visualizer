@@ -3,15 +3,23 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import type { DragEvent } from 'react';
 import { Canvas } from './components/Canvas';
 import { ParametersPanel } from './components/ParametersPanel';
+import type { ProgramSummary } from './components/ParametersPanel';
+import { ProgramBar } from './components/ProgramBar';
+import { ProgramView } from './components/ProgramView';
 import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 import type { ViewMode } from './components/ViewToggle';
 import { ViewToggle } from './components/ViewToggle';
 import type { MachineParams, Units } from './machine/params';
 import { DEFAULT_PARAMS, unitFactor } from './machine/params';
+import { analyzeProgram } from './gcode/analyze';
+import { parseGcode } from './gcode/parse';
+import { scaleMoves } from './gcode/scale';
 import { useDrawingState } from './state/useDrawingState';
 import { useMachineParams } from './state/useMachineParams';
+import { useProgram } from './state/useProgram';
 import { estimateCutTime } from './toolpath/estimate';
 import { buildMoves } from './toolpath/moves';
 import { effectiveCutSide } from './toolpath/offset';
@@ -19,6 +27,8 @@ import { computeToolpath } from './toolpath/toolpath';
 
 // Three.js is only downloaded once the 3D view is first opened.
 const Viewer3D = lazy(() => import('./components/Viewer3D'));
+
+const SAMPLE_URL = `${import.meta.env.BASE_URL}samples/demo.nc`;
 
 const PANEL_OPEN_KEY = 'cnc-visualizer.panelOpen';
 const VIEW_KEY = 'cnc-visualizer.view';
@@ -44,6 +54,8 @@ function App() {
   const { params, update, setUnits, replace } = useMachineParams();
   const [panelOpen, setPanelOpen] = useState(loadPanelOpen);
   const [view, setView] = useState(loadView);
+  const programFile = useProgram();
+  const [dropping, setDropping] = useState(false);
 
   useEffect(() => {
     try {
@@ -87,22 +99,100 @@ function App() {
     () => computeToolpath(drawing.segments, drawing.closed, cutSide, params),
     [drawing.segments, drawing.closed, cutSide, params]
   );
-  const moves = useMemo(() => buildMoves(toolpath.loops, toolpath.closed, params), [toolpath, params]);
+  const drawingMoves = useMemo(() => buildMoves(toolpath.loops, toolpath.closed, params), [toolpath, params]);
+
+  // An open G-code file replaces the drawing as the source of moves; the
+  // drawing and its history stay untouched underneath. The program keeps
+  // its own units and is scaled into the current ones, so a unit toggle
+  // never changes it physically. It re-parses when the start height moves.
+  const { source } = programFile;
+  const { safeHeight, units } = params;
+  const program = useMemo(
+    () => (source ? parseGcode(source.text, { point: { x: 0, y: 0, z: safeHeight }, units }) : null),
+    [source, safeHeight, units]
+  );
+  const programMoves = useMemo(
+    () => (program ? scaleMoves(program.moves, unitFactor(program.units, units)) : null),
+    [program, units]
+  );
+  const moves = programMoves ?? drawingMoves;
+  const diagnostics = useMemo(
+    () => (program && programMoves ? [...program.diagnostics, ...analyzeProgram(programMoves, params)] : []),
+    [program, programMoves, params]
+  );
+  const programSummary: ProgramSummary | null =
+    program && source
+      ? {
+          fileName: source.name,
+          units: program.units,
+          lineCount: program.lineCount,
+          moveCount: program.moves.length,
+          diagnostics,
+        }
+      : null;
+
   const estimate = useMemo(() => estimateCutTime(moves, params), [moves, params]);
   const viewToggle = <ViewToggle view={view} onChange={setView} />;
+
+  const { load } = programFile;
+  // Files dropped on the workspace open as G-code; the parameters panel is
+  // not a drop target (settings files are imported from its own button).
+  const hasFiles = (e: DragEvent) =>
+    e.dataTransfer.types.includes('Files') && !(e.target instanceof Element && e.target.closest('.params-panel'));
+  const handleDragOver = (e: DragEvent) => {
+    if (!hasFiles(e)) {
+      setDropping(false);
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDropping(true);
+  };
+  const handleDrop = (e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    setDropping(false);
+    const file = e.dataTransfer.files[0];
+    if (file) load(file);
+  };
+  const handleDragLeave = (e: DragEvent) => {
+    // Leaving for a child element still counts as inside.
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+  };
 
   return (
     <div className="app">
       <header className="app-header">
         <h1>CNC Toolpath Visualizer</h1>
+        <ProgramBar
+          fileName={source?.name ?? null}
+          error={programFile.error}
+          onOpen={load}
+          onLoadSample={() => programFile.loadUrl(SAMPLE_URL, 'demo.nc')}
+          onClose={programFile.close}
+        />
       </header>
-      <main className="app-main">
+      <main
+        className={dropping ? 'app-main dropping' : 'app-main'}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         {view === '3d' ? (
           <ViewErrorBoundary viewToggle={viewToggle}>
             <Suspense fallback={<div className="canvas-workspace view-loading">Loading 3D view…</div>}>
               <Viewer3D moves={moves} params={params} estimate={estimate} viewToggle={viewToggle} />
             </Suspense>
           </ViewErrorBoundary>
+        ) : program && source ? (
+          <ProgramView
+            moves={moves}
+            sheet={params.sheet}
+            fileName={source.name}
+            lineCount={program.lineCount}
+            estimate={estimate}
+            viewToggle={viewToggle}
+          />
         ) : (
           <Canvas
             drawing={drawing}
@@ -115,6 +205,7 @@ function App() {
         )}
         <ParametersPanel
           params={params}
+          program={programSummary}
           update={update}
           toolpath={toolpath}
           estimate={estimate}

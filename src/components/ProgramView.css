@@ -1,0 +1,39 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+.program-svg {
+  cursor: default;
+}
+
+.program-svg path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.program-feed {
+  stroke: var(--toolpath);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+}
+
+.program-rapid {
+  stroke: var(--text);
+  stroke-width: 1px;
+  stroke-dasharray: 5 4;
+  opacity: 0.8;
+}
+
+/* Zero-length subpaths: the round cap draws a dot of the stroke's width. */
+.program-plunge {
+  stroke: var(--accent);
+  stroke-width: 7px;
+  stroke-linecap: round;
+}
+
+.program-retract {
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linecap: round;
+}
