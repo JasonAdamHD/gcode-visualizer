@@ -13,11 +13,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { MachineParams } from '../machine/params';
 import { unitFactor } from '../machine/params';
-import { bitProfile, moveLineBuffers } from '../sim/sceneData';
+import { bitProfile, moveLineBuffers, pathBuffer } from '../sim/sceneData';
 import type { MoveKind } from '../sim/sceneData';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
-import type { Move, Point3 } from '../toolpath/moves';
+import type { Move } from '../toolpath/moves';
+import { buildTimeline, sampleTimeline } from '../toolpath/timeline';
+import { usePlayback } from '../state/usePlayback';
+import { PlaybackBar } from './PlaybackBar';
 import './Workspace.css';
 import './Viewer3D.css';
 
@@ -25,8 +28,6 @@ type Viewer3DProps = {
   moves: Move[];
   params: MachineParams;
   estimate: CutTimeEstimate;
-  /** Bit tip position in world units. */
-  position: Point3;
   /** The 2D/3D switch, rendered at the start of the toolbar. */
   viewToggle: ReactNode;
 };
@@ -40,6 +41,7 @@ type Palette = {
   sheet: string;
   spoilboard: string;
   bit: string;
+  traversed: string;
 };
 
 /** Visual spoilboard thickness in inches (not a machine parameter). */
@@ -71,6 +73,7 @@ function readPalette(el: HTMLElement): Palette {
     sheet: v('--sheet-3d', '#d8c3a0'),
     spoilboard: v('--spoilboard-3d', '#9c8b70'),
     bit: v('--text', '#6b6375'),
+    traversed: v('--traversed-3d', '#d97706'),
   };
 }
 
@@ -125,10 +128,22 @@ type SceneState = {
   controls: OrbitControls;
   job: THREE.Group;
   bit: THREE.Mesh;
+  /** The path already played, drawn over the job lines up to the current block. */
+  traversed: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  /** The played part of the current block, from its start to the bit. */
+  current: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   render: () => void;
 };
 
-export default function Viewer3D({ moves, params, estimate, position, viewToggle }: Viewer3DProps) {
+/** True for elements that handle Space themselves (typing, buttons, sliders). */
+function handlesSpace(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName))
+  );
+}
+
+export default function Viewer3D({ moves, params, estimate, viewToggle }: Viewer3DProps) {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneState | null>(null);
@@ -159,7 +174,17 @@ export default function Viewer3D({ moves, params, estimate, position, viewToggle
     const job = new THREE.Group();
     const bit = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial());
     bit.rotation.x = Math.PI / 2; // Lathe axis is +Y; turn it to +Z.
-    scene.add(job, bit);
+    // Drawn after the job lines so the highlight wins where they coincide.
+    const overlay = () => {
+      const line = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial());
+      line.renderOrder = 1;
+      line.frustumCulled = false;
+      return line;
+    };
+    const traversed = overlay();
+    const current = overlay();
+    current.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    scene.add(job, bit, traversed, current);
 
     let frame = 0;
     const render = () => {
@@ -183,7 +208,7 @@ export default function Viewer3D({ moves, params, estimate, position, viewToggle
     observer.observe(host);
     resize();
 
-    sceneRef.current = { renderer, scene, camera, controls, job, bit, render };
+    sceneRef.current = { renderer, scene, camera, controls, job, bit, traversed, current, render };
     return () => {
       sceneRef.current = null;
       cancelAnimationFrame(frame);
@@ -263,16 +288,58 @@ export default function Viewer3D({ moves, params, estimate, position, viewToggle
       32
     );
     (s.bit.material as THREE.MeshLambertMaterial).color.set(palette.bit);
+    s.traversed.material.color.set(palette.traversed);
+    s.current.material.color.set(palette.traversed);
     s.render();
   }, [lines, palette, sheetX, sheetY, thickness, params.units, params.bit]);
 
-  // (c) Bit position.
+  const timeline = useMemo(() => buildTimeline(moves, params), [moves, params]);
+  const path = useMemo(() => pathBuffer(moves, params), [moves, params]);
+  const playback = usePlayback(timeline.total, timeline);
+  const sample = useMemo(() => sampleTimeline(timeline, playback.time), [timeline, playback.time]);
+
+  // The whole path in playback order, revealed block by block in (c).
   useEffect(() => {
     const s = sceneRef.current;
     if (!s) return;
-    s.bit.position.set(position.x, position.y, position.z);
+    s.traversed.geometry.dispose();
+    s.traversed.geometry = new THREE.BufferGeometry();
+    s.traversed.geometry.setAttribute('position', new THREE.BufferAttribute(path, 3));
+    s.traversed.geometry.setDrawRange(0, 0);
     s.render();
-  }, [position]);
+  }, [path]);
+
+  // (c) Bit position and the played part of the path. Only moves things and
+  // sets a draw range, so it is cheap enough to run every frame.
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const { position, block } = sample;
+    s.bit.position.set(position.x, position.y, position.z);
+    s.traversed.geometry.setDrawRange(0, Math.max(0, block) * 2);
+    const attr = s.current.geometry.getAttribute('position') as THREE.BufferAttribute;
+    if (block >= 0) {
+      attr.setXYZ(0, path[block * 6], path[block * 6 + 1], path[block * 6 + 2]);
+      attr.setXYZ(1, position.x, position.y, position.z);
+    } else {
+      attr.setXYZ(0, 0, 0, 0);
+      attr.setXYZ(1, 0, 0, 0);
+    }
+    attr.needsUpdate = true;
+    s.render();
+  }, [sample, path]);
+
+  // Space plays and pauses while the 3D view is open.
+  const { toggle } = playback;
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== ' ' || handlesSpace(e.target)) return;
+      e.preventDefault();
+      toggle();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggle]);
 
   return (
     <div className="canvas-workspace" ref={workspaceRef}>
@@ -295,7 +362,8 @@ export default function Viewer3D({ moves, params, estimate, position, viewToggle
       <div className="viewer-3d" ref={hostRef}>
         {webglError && <p className="viewer-3d-message">3D view needs WebGL, which this browser has turned off or does not support.</p>}
       </div>
-      <p className="hint">Drag to orbit, right-drag (or Shift+drag) to pan, scroll to zoom.</p>
+      <PlaybackBar playback={playback} total={timeline.total} sample={sample} units={params.units} />
+      <p className="hint">Drag to orbit, right-drag (or Shift+drag) to pan, scroll to zoom. Space plays and pauses.</p>
     </div>
   );
 }

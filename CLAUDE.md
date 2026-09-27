@@ -56,21 +56,40 @@ npm run check        # lint + build + test: run before every commit
     warnings).
   - `moves.ts`: the `Move` list (rapid/plunge/feed/retract) with depth
     passes. **Z = 0 at the sheet top, negative into material**; home is
-    the sheet origin at safe height. Phase 4 animates this list.
+    the sheet origin at safe height. The 3D view animates this list, and
+    Phase 5 import will produce it too, so keep viewers dependent on
+    `Move[]` only.
   - `planner.ts`: GRBL-style planner (arcs to chords, junction deviation,
-    backward/forward passes, trapezoidal profiles); `estimate.ts` buckets
-    its per-move times.
+    backward/forward passes, trapezoidal profiles). `planBlocks` exposes
+    each block's entry/exit speed and time; `planTime` sums them and
+    `estimate.ts` buckets the per-move times.
+  - `timeline.ts`: playback timing on top of `planBlocks`. `profileAt`
+    inverts `blockTime`; `sampleTimeline` gives position, move, block and
+    speed at any time. Its total must equal the estimate (tested).
+- `src/sim/sceneData.ts` holds pure data for the 3D view: per-kind line
+  buffers, a playback-ordered path buffer (piece `i` = timeline block `i`),
+  and lathe outlines for the bit shapes.
 - `src/state/useDrawingState.ts` is a React hook holding drawing state as
   immutable snapshots in a history array (undo/redo moves an index). Arc
   bowing uses a transient drag state that commits one snapshot on release.
 - `src/state/useMachineParams.ts` holds `MachineParams`, persisted to
   localStorage. It knows nothing about the drawing.
+- `src/state/usePlayback.ts` is the transient playback clock (not in
+  history, not persisted): a requestAnimationFrame loop that pauses and
+  clamps when the timeline changes.
 - `src/App.tsx` owns both hooks. Units live **outside** drawing history: a
   unit change (toggle, import, reset) rescales every history snapshot in
   place via `rescale`, so undo never shows inch geometry on an mm sheet.
 - `src/components/Canvas.tsx` does SVG rendering and pointer handling. It
   converts screen coordinates to world coordinates and picks the snap mode
   from modifier keys (Ctrl/Cmd = axis lock, Shift = no snap).
+- `src/components/Viewer3D.tsx` is the 3D view, lazily loaded (Three.js
+  stays out of the main chunk) inside `ViewErrorBoundary`. It owns Three.js
+  imperatively: one effect creates/disposes the renderer, others rebuild
+  geometry or move the bit, and frames render on demand. The scene uses
+  machine coordinates directly; only the camera differs from Three.js
+  defaults (`camera.up = (0, 0, 1)`, **Z up**). Never swap axes in scene
+  data. `PlaybackBar.tsx` holds the playback controls and readout.
 - World coordinates are **Y-up** (CNC convention). SVG is Y-down, so the
   flip happens at the canvas boundary (`screenToWorld`). Keep geometry code
   in world coordinates.

@@ -134,6 +134,7 @@ describe('sampleTimeline', () => {
       const s = sampleTimeline(timeline, timeline.moveStart[i]);
       near(s.position, move.from);
       expect(s.moveIndex).toBe(i);
+      expect(timeline.blocks[s.block].move).toBe(i);
       expect(s.kind).toBe(move.kind);
     });
   });
@@ -146,12 +147,14 @@ describe('sampleTimeline', () => {
       near(s.position, home);
       expect(s.speed).toBe(0);
       expect(s.moveIndex).toBe(0);
+      expect(s.block).toBe(0);
     }
     for (const t of [timeline.total, timeline.total + 1]) {
       const s = sampleTimeline(timeline, t);
       expect(s.position).toEqual(home);
       expect(s.speed).toBe(0);
       expect(s.moveIndex).toBe(moves.length - 1);
+      expect(s.block).toBe(timeline.blocks.length - 1);
     }
   });
 
@@ -194,6 +197,7 @@ describe('sampleTimeline', () => {
       expect(sampleTimeline(timeline, t)).toEqual({
         position: { x: 0, y: 0, z: p.safeHeight },
         moveIndex: -1,
+        block: -1,
         kind: null,
         speed: 0,
       });
