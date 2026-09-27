@@ -10,7 +10,7 @@ import { estimateCutTime } from './estimate';
 import type { Move, Point3 } from './moves';
 import { buildMoves } from './moves';
 import { blockTime, planTime } from './planner';
-import { buildTimeline, profileAt, sampleTimeline } from './timeline';
+import { adjacentMoveTime, buildTimeline, moveBlockStarts, profileAt, sampleTimeline } from './timeline';
 
 const seg = (start: Point, end: Point, bulge = 0): Segment => ({ type: bulge ? 'arc' : 'line', start, end, bulge });
 const pt = (x: number, y: number): Point => ({ x, y });
@@ -202,5 +202,59 @@ describe('sampleTimeline', () => {
         speed: 0,
       });
     }
+  });
+});
+
+describe('moveBlockStarts', () => {
+  it('gives each move its block range, empty for moves without blocks', () => {
+    const p3 = (x: number, y: number, z = 0): Point3 => ({ x, y, z });
+    const moves: Move[] = [
+      { kind: 'feed', from: p3(0, 0), to: p3(1, 0) },
+      { kind: 'feed', from: p3(1, 0), to: p3(1, 0) }, // zero length: no blocks
+      { kind: 'feed', from: p3(1, 0), to: p3(-1, 0), bulge: 1 }, // arc: several chords
+    ];
+    const timeline = buildTimeline(moves, params());
+    const first = moveBlockStarts(timeline);
+    expect(first.length).toBe(4);
+    expect([first[0], first[1], first[2]]).toEqual([0, 1, 1]);
+    expect(first[3]).toBe(timeline.blocks.length);
+    for (let b = first[2]; b < first[3]; b++) expect(timeline.blocks[b].move).toBe(2);
+  });
+});
+
+describe('adjacentMoveTime', () => {
+  const timeline = buildTimeline(buildMoves([square], [true], params()), params());
+  const starts = Array.from(timeline.moveStart);
+
+  it('steps forward and back through distinct move starts', () => {
+    expect(adjacentMoveTime(timeline, 0, -1)).toBeNull();
+    let t = 0;
+    const visited = [t];
+    for (let next = adjacentMoveTime(timeline, t, 1); next !== null; next = adjacentMoveTime(timeline, t, 1)) {
+      expect(next).toBeGreaterThan(t);
+      t = next;
+      visited.push(t);
+    }
+    expect(visited).toEqual([...new Set(starts)]);
+    expect(adjacentMoveTime(timeline, visited[2], -1)).toBe(visited[1]);
+  });
+
+  it('goes back to the start of the current move from inside it', () => {
+    const mid = (starts[2] + starts[3]) / 2;
+    expect(adjacentMoveTime(timeline, mid, -1)).toBe(starts[2]);
+    expect(adjacentMoveTime(timeline, mid, 1)).toBe(starts[3]);
+  });
+
+  it('never lands twice on a start shared by a zero-time move', () => {
+    const p3 = (x: number, y: number, z = 0): Point3 => ({ x, y, z });
+    const moves: Move[] = [
+      { kind: 'feed', from: p3(0, 0), to: p3(1, 0) },
+      { kind: 'feed', from: p3(1, 0), to: p3(1, 0) },
+      { kind: 'feed', from: p3(1, 0), to: p3(2, 0) },
+    ];
+    const tl = buildTimeline(moves, params());
+    expect(tl.moveStart[1]).toBe(tl.moveStart[2]);
+    expect(adjacentMoveTime(tl, tl.moveStart[2], -1)).toBe(0);
+    expect(adjacentMoveTime(tl, 0, 1)).toBe(tl.moveStart[2]);
   });
 });
