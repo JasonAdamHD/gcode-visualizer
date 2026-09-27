@@ -7,7 +7,7 @@ Guidance for coding agents working in this repository.
 A browser-based CNC toolpath visualizer: draw 2D cut paths on a sheet, and
 eventually compute cutter-compensated toolpaths, estimate cut time, simulate
 in 3D, and import/debug real G-code. See `README.md` for the full roadmap
-(Phases 1–8) and the **Status** checklist of what is done.
+(Phases 1–9) and the **Status** checklist of what is done.
 
 This project is developed agent-first: agents implement changes on branches,
 and a human reviews and merges. Leave every change in a state a reviewer can
