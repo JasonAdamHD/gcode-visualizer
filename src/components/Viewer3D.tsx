@@ -565,7 +565,8 @@ export default function Viewer3D({
       // The old target belongs to the old timeline; (c) sets the next one.
       targetRef.current = null;
       clearGroup(s.stockGroup);
-      s.render();
+      // On unmount (a) has already disposed the renderer; only redraw a live scene.
+      if (sceneRef.current === s) s.render();
     };
   }, [timeline, sheetX, sheetY, thickness, bitParams, stockColors, simulate]);
 
@@ -576,6 +577,8 @@ export default function Viewer3D({
     const s = sceneRef.current;
     if (!st || !s || !palette) return;
     writeSurfaceRows(st.stock, st.positions.array as Float32Array, { data: st.colors.array as Uint8Array, ...stockColors() }, 0, st.stock.ny - 1);
+    // Ranges queued by a simulation slice would limit the upload to their rows.
+    st.colors.clearUpdateRanges();
     st.colors.needsUpdate = true;
     st.skirt.material.color.set(palette.stock);
     s.render();
