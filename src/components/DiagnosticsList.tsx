@@ -36,9 +36,17 @@ const SEVERITY_LABELS: Record<Severity, string> = { error: 'Error', warning: 'Wa
 
 /**
  * Diagnostics grouped by code, errors first, each group a disclosure with
- * its count that expands to its lines (1-based) and messages.
+ * its count that expands to its lines (1-based) and messages. With
+ * `onSelectLine`, a row jumps to its line.
  */
-export function DiagnosticsList({ diagnostics }: { diagnostics: Diagnostic[] }) {
+export function DiagnosticsList({
+  diagnostics,
+  onSelectLine,
+}: {
+  diagnostics: Diagnostic[];
+  /** Called with a diagnostic's 0-based line when its row is clicked; rows are plain text without it. */
+  onSelectLine?: (line: number) => void;
+}) {
   const groups = useMemo(() => groupDiagnostics(diagnostics), [diagnostics]);
   if (groups.length === 0) return <p className="derived">No problems found.</p>;
 
@@ -57,7 +65,15 @@ export function DiagnosticsList({ diagnostics }: { diagnostics: Diagnostic[] }) 
             <ol className="diagnostic-rows">
               {group.items.slice(0, MAX_ROWS).map((d, i) => (
                 <li key={i}>
-                  {d.line >= 0 && <span className="diagnostic-line">Line {d.line + 1}</span>} {d.message}
+                  {onSelectLine && d.line >= 0 ? (
+                    <button type="button" onClick={() => onSelectLine(d.line)}>
+                      <span className="diagnostic-line">Line {d.line + 1}</span> {d.message}
+                    </button>
+                  ) : (
+                    <>
+                      {d.line >= 0 && <span className="diagnostic-line">Line {d.line + 1}</span>} {d.message}
+                    </>
+                  )}
                 </li>
               ))}
               {group.items.length > MAX_ROWS && <li className="diagnostic-more">+{group.items.length - MAX_ROWS} more</li>}

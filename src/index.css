@@ -14,6 +14,9 @@
   --canvas-bg: #fafafa;
   --sheet-bg: #ffffff;
   --grid-line: #e0dee4;
+  --severity-error: #d93a3a;
+  --severity-warning: #c27c0e;
+  --severity-info: #3b82f6;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
@@ -41,6 +44,9 @@
     --canvas-bg: #101116;
     --sheet-bg: #1a1b21;
     --grid-line: #2a2b33;
+    --severity-error: #f87171;
+    --severity-warning: #fbbf24;
+    --severity-info: #60a5fa;
   }
 }
 

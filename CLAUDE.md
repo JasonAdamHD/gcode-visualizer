@@ -56,9 +56,10 @@ npm run check        # lint + build + test: run before every commit
     warnings).
   - `moves.ts`: the `Move` list (rapid/plunge/feed/retract) with depth
     passes. **Z = 0 at the sheet top, negative into material**; home is
-    the sheet origin at safe height. The 3D view animates this list, and
-    Phase 5 import will produce it too, so keep viewers dependent on
-    `Move[]` only.
+    the sheet origin at safe height. The views animate this list and the
+    G-code parser produces it too, so keep viewers dependent on `Move[]`
+    only. Imported moves carry `sourceLine` (0-based) and `feedRate` (the
+    F word; the planner prefers it over the params' feed/plunge rate).
   - `planner.ts`: GRBL-style planner (arcs to chords, junction deviation,
     backward/forward passes, trapezoidal profiles). `planBlocks` exposes
     each block's entry/exit speed and time; `planTime` sums them and
@@ -66,6 +67,7 @@ npm run check        # lint + build + test: run before every commit
   - `timeline.ts`: playback timing on top of `planBlocks`. `profileAt`
     inverts `blockTime`; `sampleTimeline` gives position, move, block and
     speed at any time. Its total must equal the estimate (tested).
+    `moveBlockStarts` and `adjacentMoveTime` support step-through.
 - `src/sim/sceneData.ts` holds pure data for the 3D view: per-kind line
   buffers, a playback-ordered path buffer (piece `i` = timeline block `i`),
   and lathe outlines for the bit shapes.
@@ -77,7 +79,12 @@ npm run check        # lint + build + test: run before every commit
 - `src/state/usePlayback.ts` is the transient playback clock (not in
   history, not persisted): a requestAnimationFrame loop that pauses and
   clamps when the timeline changes.
-- `src/App.tsx` owns both hooks. Units live **outside** drawing history: a
+- `src/state/useProgram.ts` holds the open G-code file's name and text,
+  in memory only: never uploaded, never persisted (README Privacy).
+- `src/App.tsx` owns the drawing, params and program hooks. While a
+  program is open its moves (parsed in its own units, scaled into the
+  current ones with `scaleMoves`) replace `buildMoves`; the drawing and
+  its history stay untouched underneath. Units live **outside** drawing history: a
   unit change (toggle, import, reset) rescales every history snapshot in
   place via `rescale`, so undo never shows inch geometry on an mm sheet.
 - `src/components/Canvas.tsx` does SVG rendering and pointer handling. It
@@ -89,12 +96,31 @@ npm run check        # lint + build + test: run before every commit
   geometry or move the bit, and frames render on demand. The scene uses
   machine coordinates directly; only the camera differs from Three.js
   defaults (`camera.up = (0, 0, 1)`, **Z up**). Never swap axes in scene
-  data. `PlaybackBar.tsx` holds the playback controls and readout.
+  data. It gets the timeline, clock and sample as props.
+  `PlaybackBar.tsx` holds the playback controls and readout.
+- `src/components/PlaybackWorkspace.tsx` owns the one playback clock
+  (`usePlayback`) shared by the 3D view, the read-only 2D `ProgramView`
+  and the `ProgramPane` (problems + virtualized `SourceListing`), so they
+  agree on the current move and only this subtree re-renders while
+  playing. The drawing's 2D `Canvas` sits outside it.
 - World coordinates are **Y-up** (CNC convention). SVG is Y-down, so the
   flip happens at the canvas boundary (`screenToWorld`). Keep geometry code
   in world coordinates.
-- Planned: `src/gcode/` for the G-code parser (Phase 5). Keep parsing pure
-  and client-side only (see the Privacy section of the README).
+- `src/gcode/` imports G-code (pure, tested; client-side only, see the
+  README's Privacy section):
+  - `tokenize.ts`: one line to words and comments, knowing nothing about
+    meaning. Kept separate from the interpreter so a controller dialect
+    layer can sit between them later.
+  - `parse.ts`: `parseGcode(text, start)`, the modal interpreter (GRBL
+    semantics: G0–G3 in XY, G17, G20/G21, G90/G91, F) producing `Move[]`
+    and diagnostics. The first G20/G21 sets the program's units (mm if
+    none); arcs over 180° are split in two; every other word is reported,
+    never silently ignored. `sourceLines` numbers lines the same way.
+  - `analyze.ts`: job checks against the params (rapids into material, too
+    deep, off the sheet, nothing cut), separate from parsing so they re-run
+    without re-parsing.
+  - `diagnostics.ts` (codes, grouping), `scale.ts`, `pathData.ts` (2D view
+    paths and bounds), `step.ts` (line to move).
 
 ## Conventions
 

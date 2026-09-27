@@ -1,0 +1,63 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+.source-listing {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--canvas-bg);
+}
+
+.source-rows {
+  position: relative;
+}
+
+.source-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 0;
+  border: none;
+  background: none;
+  color: var(--text-h);
+  font: 12px/20px var(--mono);
+  text-align: left;
+  cursor: pointer;
+}
+
+.source-row:hover {
+  background: var(--accent-bg);
+}
+
+.source-row.current {
+  background: var(--accent-bg);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.source-number {
+  flex: none;
+  padding-right: 4px;
+  text-align: right;
+  color: var(--text);
+  user-select: none;
+}
+
+.source-marker {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.source-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  font: inherit;
+}

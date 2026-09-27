@@ -17,6 +17,8 @@ type PlaybackBarProps = {
   /** Machine state at the playback time. */
   sample: TimelineSample;
   units: Units;
+  /** Jumps to the previous (−1) or next (1) move; the step buttons are shown only with it. */
+  onStep?: (direction: 1 | -1) => void;
 };
 
 const KIND_LABELS: Record<NonNullable<TimelineSample['kind']>, string> = {
@@ -27,7 +29,7 @@ const KIND_LABELS: Record<NonNullable<TimelineSample['kind']>, string> = {
 };
 
 /** Play/pause, restart, scrubber, speed and a readout of where the bit is. */
-export function PlaybackBar({ playback, total, sample, units }: PlaybackBarProps) {
+export function PlaybackBar({ playback, total, sample, units, onStep }: PlaybackBarProps) {
   const { time, playing, speed } = playback;
   const empty = !(total > 0);
   const decimals = displayDecimals(units);
@@ -41,6 +43,16 @@ export function PlaybackBar({ playback, total, sample, units }: PlaybackBarProps
       <button type="button" onClick={playback.restart} disabled={empty || time === 0}>
         Restart
       </button>
+      {onStep && (
+        <>
+          <button type="button" onClick={() => onStep(-1)} disabled={empty} title="Previous move (←)">
+            ◀ Move
+          </button>
+          <button type="button" onClick={() => onStep(1)} disabled={empty} title="Next move (→)">
+            Move ▶
+          </button>
+        </>
+      )}
       <input
         type="range"
         className="playback-scrubber"

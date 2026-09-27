@@ -145,3 +145,41 @@ export function sampleTimeline(timeline: Timeline, t: number): TimelineSample {
     speed,
   };
 }
+
+/**
+ * Where each move's blocks start: move `m` owns blocks
+ * `[first[m], first[m + 1])` (empty for a move with no blocks, e.g. zero
+ * length). `first` has `moves.length + 1` entries.
+ */
+export function moveBlockStarts(timeline: Timeline): Int32Array {
+  const { blocks, moves } = timeline;
+  const first = new Int32Array(moves.length + 1);
+  let b = blocks.length;
+  for (let m = moves.length; m >= 0; m--) {
+    while (b > 0 && blocks[b - 1].move >= m) b--;
+    first[m] = b;
+  }
+  return first;
+}
+
+/**
+ * The start time of the nearest move starting strictly after `t`
+ * (`direction` 1) or strictly before it (−1), or null when there is none.
+ * Moves that take no time share a start with the next move, so stepping
+ * never lands twice on the same time.
+ */
+export function adjacentMoveTime(timeline: Timeline, t: number, direction: 1 | -1): number | null {
+  const starts = timeline.moveStart;
+  const eps = 1e-9;
+  // First index whose start is > t + eps (for 1) or >= t - eps (for −1).
+  const target = direction === 1 ? t + eps : t - eps;
+  let lo = 0;
+  let hi = starts.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (direction === 1 ? starts[mid] <= target : starts[mid] < target) lo = mid + 1;
+    else hi = mid;
+  }
+  if (direction === 1) return lo < starts.length ? starts[lo] : null;
+  return lo > 0 ? starts[lo - 1] : null;
+}

@@ -7,6 +7,7 @@
   --sheet-3d: #d8c3a0;
   --spoilboard-3d: #9c8b70;
   --traversed-3d: #d97706;
+  --current-move: #e11d48;
 
   display: flex;
   flex-direction: column;
@@ -151,6 +152,7 @@
     --sheet-3d: #a08a66;
     --spoilboard-3d: #6b5d48;
     --traversed-3d: #fbbf24;
+    --current-move: #fb7185;
   }
 }
 

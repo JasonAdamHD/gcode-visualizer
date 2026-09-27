@@ -72,7 +72,12 @@ from changing `master` directly.
       (play/pause, scrub, speed) timed by the same planner as the cut-time
       estimate, so the bit slows into corners and the traversed path is
       highlighted
-- [ ] Phase 5 — G-code import + debugging (parser, step-through, error flags).
+- [x] Phase 5 — G-code import + debugging: open a file (or the bundled
+      sample) by button or drag-drop, parsed in the browser only; view it in
+      2D and 3D with the estimate and playback; step move by move with the
+      current line highlighted in a source listing, the 2D view and the 3D
+      view; grouped problem flags (syntax, bad arcs, unsupported words,
+      rapids into material, too deep, off the sheet) that jump to their line.
       The initial import supports basic, standard G-code syntax only:
       G0/G1/G2/G3 (arcs by I/J or R, XY plane), G20/G21 units,
       G90/G91 positioning, F feed rates, and comments; other words are
@@ -147,9 +152,9 @@ however you want.
   /machine       # Machine/job parameters: units, conversion, validation (+ *.test.ts)
   /toolpath      # Cutter compensation, moves, planner, cut-time estimate, playback timeline (+ *.test.ts)
   /sim           # Pure 3D scene data: line buffers, bit profiles (+ *.test.ts)
-  /gcode         # G-code parsing -> Path, for import (Phase 5)
-  /components    # UI components (Canvas, Viewer3D, PlaybackBar, ParametersPanel, etc.)
-  /state         # Drawing state (undo/redo), persisted machine params, playback clock
+  /gcode         # G-code tokenizer, parser and job checks -> Move[] (+ *.test.ts)
+  /components    # UI components (Canvas, Viewer3D, ProgramView, SourceListing, ParametersPanel, etc.)
+  /state         # Drawing state (undo/redo), persisted machine params, playback clock, open G-code file
 /.claude         # Claude Code settings and SessionStart hook
 /.github         # CI workflow
 /docs/plans      # Working plans handed to implementing agents
