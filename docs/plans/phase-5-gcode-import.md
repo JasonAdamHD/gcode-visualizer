@@ -85,8 +85,9 @@ the traversed-path highlight and `pathBuffer` are on `master`.
    - A full circle (start = end with I/J) splits into two half arcs
      (bulge ±1) with the same `sourceLine`, because one bulge cannot
      represent 360°.
-   - A zero-length move (e.g. `G1 X10` while already at X10) is dropped,
-     as in `buildMoves`.
+   - A zero-length straight move (e.g. `G1 X10` while already at X10) is
+     dropped, as in `buildMoves`. The full-circle split happens first, so
+     an arc with start = end is never dropped.
 3. **Units.** The parser converts everything to one unit: the program's
    `units`, from the first G20/G21, or mm (GRBL's default) if there is
    none. A mid-file unit switch is converted and noted as `info`. The App
@@ -157,7 +158,8 @@ next one starts.
      - An erroring arc becomes a straight `feed` to its end point, with
        the error on its line, so the path stays continuous.
    - G1/G2/G3 before any F is an error; the move has no `feedRate`, so
-     timing falls back to `params.feedRate`.
+     timing falls back to `params.feedRate` or `params.plungeRate` by kind
+     (decision 1).
    - Every other word (M3/M5/S/T/M6/G4/G28/G53/G54/G18/G19/G41/G42…) gets a
      `warning` that names the word and says it was ignored. G18/G19 also
      make the following arcs errors (they would be in another plane).
@@ -184,8 +186,12 @@ next one starts.
 ### PR 2 — `feat/gcode-analysis`: job checks
 
 1. **`src/gcode/analyze.ts`**: `analyzeProgram(moves, params)`. Checks:
-   - `rapid-into-material` (error): a `rapid` whose start or end is below
-     Z = 0.
+   - `rapid-into-material` (error): a `rapid` that goes below the
+     deepest Z already reached, or that moves in XY while below Z = 0.
+     Rapiding down into an already-cut slot is normal: `buildMoves` does
+     it on later passes of an open path, and so do most CAM post
+     processors. Tests must include that `buildMoves` pattern and expect
+     no diagnostic.
    - `too-deep` (error): Z below −(thickness + spoilboardPenetration).
    - `out-of-bounds` (warning): a cutting move (below Z = 0) that leaves
      the sheet in XY. Check arcs through their chord points from
