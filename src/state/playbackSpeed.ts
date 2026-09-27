@@ -11,8 +11,14 @@ export const MAX_SPEED = 500;
 /** Round speeds the slider snaps to and marks. */
 export const PLAYBACK_SPEEDS = [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500] as const;
 
-/** How close (in octaves) a slider value must be to a detent to snap to it. */
-const SNAP_OCTAVES = 0.1;
+/** Slider step in octaves (one arrow key press): about 9 % per step. */
+export const SPEED_STEP_OCTAVES = 0.125;
+
+/**
+ * How close (in octaves) a slider value must be to a detent to snap to it.
+ * Less than one step, so arrow keys can always move off a detent.
+ */
+const SNAP_OCTAVES = 0.06;
 
 /** `speed` limited to `[MIN_SPEED, MAX_SPEED]`. */
 export function clampSpeed(speed: number): number {

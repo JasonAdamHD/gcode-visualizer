@@ -3,11 +3,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { describe, expect, it } from 'vitest';
-import { MAX_SPEED, MIN_SPEED, clampSpeed, formatSpeed, speedFromSlider } from './playbackSpeed';
+import {
+  MAX_SPEED,
+  MIN_SPEED,
+  PLAYBACK_SPEEDS,
+  SPEED_STEP_OCTAVES,
+  clampSpeed,
+  formatSpeed,
+  speedFromSlider,
+} from './playbackSpeed';
 
 describe('speedFromSlider', () => {
   it('snaps to a nearby detent', () => {
-    expect(speedFromSlider(Math.log2(1.05))).toBe(1);
+    expect(speedFromSlider(Math.log2(1.03))).toBe(1);
     expect(speedFromSlider(Math.log2(48))).toBe(50);
     expect(speedFromSlider(0)).toBe(1);
   });
@@ -15,6 +23,29 @@ describe('speedFromSlider', () => {
   it('rounds between detents to two significant digits', () => {
     expect(speedFromSlider(Math.log2(3.3))).toBe(3.3);
     expect(speedFromSlider(Math.log2(31.7))).toBe(32);
+  });
+
+  it('lets one keyboard step move off every detent, both ways', () => {
+    for (const d of PLAYBACK_SPEEDS) {
+      if (d < MAX_SPEED) expect(speedFromSlider(Math.log2(d) + SPEED_STEP_OCTAVES)).toBeGreaterThan(d);
+      if (d > MIN_SPEED) expect(speedFromSlider(Math.log2(d) - SPEED_STEP_OCTAVES)).toBeLessThan(d);
+    }
+  });
+
+  it('walks the whole range by keyboard steps without getting stuck', () => {
+    for (const [start, end, dir] of [
+      [MIN_SPEED, MAX_SPEED, 1],
+      [MAX_SPEED, MIN_SPEED, -1],
+    ] as const) {
+      let speed: number = start;
+      let steps = 0;
+      while (speed !== end) {
+        const next = speedFromSlider(Math.log2(speed) + dir * SPEED_STEP_OCTAVES);
+        expect(dir * (next - speed)).toBeGreaterThan(0);
+        speed = next;
+        expect(++steps).toBeLessThan(200);
+      }
+    }
   });
 
   it('clamps to the range', () => {

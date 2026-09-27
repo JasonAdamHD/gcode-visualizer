@@ -5,7 +5,14 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Units } from '../machine/params';
 import { displayDecimals } from '../machine/params';
-import { MAX_SPEED, MIN_SPEED, PLAYBACK_SPEEDS, formatSpeed, speedFromSlider } from '../state/playbackSpeed';
+import {
+  MAX_SPEED,
+  MIN_SPEED,
+  PLAYBACK_SPEEDS,
+  SPEED_STEP_OCTAVES,
+  formatSpeed,
+  speedFromSlider,
+} from '../state/playbackSpeed';
 import type { Playback } from '../state/usePlayback';
 import { formatDuration } from '../toolpath/estimate';
 import type { ScrubberTick } from '../toolpath/scrubber';
@@ -95,7 +102,7 @@ export function PlaybackBar({
           aria-label="Playback speed"
           min={Math.log2(MIN_SPEED)}
           max={Math.log2(MAX_SPEED)}
-          step={0.01}
+          step={SPEED_STEP_OCTAVES}
           list={detents}
           value={Math.log2(speed)}
           onChange={(e) => playback.setSpeed(speedFromSlider(Number(e.target.value)))}
