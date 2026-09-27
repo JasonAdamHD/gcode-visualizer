@@ -176,6 +176,18 @@ function arcGeometry(
 }
 
 /**
+ * Splits a file into its lines the way the parser numbers them: LF or CRLF
+ * endings (the CR is dropped), and one trailing newline does not start an
+ * extra line. Line `i` here is `sourceLine` / diagnostic line `i`.
+ */
+export function sourceLines(text: string): string[] {
+  if (text === '') return [];
+  const lines = text.split('\n');
+  if (lines[lines.length - 1] === '') lines.pop();
+  return lines.map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
+}
+
+/**
  * Parses G-code `text` into moves in the program's units. The program's
  * units come from the first G20/G21, or mm when there is none; a later
  * unit switch is converted. `start` is where the machine is before the
@@ -191,9 +203,7 @@ function arcGeometry(
  * plunges carry the modal F as `feedRate` once one is set.
  */
 export function parseGcode(text: string, start: StartPosition): GcodeProgram {
-  const rawLines = text === '' ? [] : text.split('\n');
-  if (rawLines.length > 0 && rawLines[rawLines.length - 1] === '') rawLines.pop();
-  const lines = rawLines.map(tokenize);
+  const lines = sourceLines(text).map(tokenize);
 
   const diagnostics: Diagnostic[] = [];
   const report = (line: number, severity: Severity, code: DiagnosticCode, message: string) =>
