@@ -6,7 +6,7 @@ export type Units = 'in' | 'mm';
 
 /**
  * Cutting bit profile. A discriminated union so that a future
- * `{ kind: 'custom'; profile: Point[] }` (user-drawn bit, README Phase 8)
+ * `{ kind: 'custom'; profile: Point[] }` (user-drawn bit, README Phase 9)
  * slots in without reshaping callers.
  */
 export type BitShape =

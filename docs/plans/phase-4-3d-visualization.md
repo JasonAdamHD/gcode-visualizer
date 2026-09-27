@@ -28,8 +28,8 @@ Show the job in 3D and simulate the bit moving along the toolpath:
   button **are** in scope.
 - G-code parsing (Phase 5). Design the viewer so Phase 5 can reuse it (see
   [Phase 5 compatibility](#phase-5-compatibility)), but do not add a parser.
-- Tabs, lead-ins, pockets (Phase 7); tool library, custom bit profiles
-  (Phase 8).
+- Tabs, lead-ins, pockets (Phase 8); tool library, custom bit profiles
+  (Phase 9).
 
 ## What already exists (read these)
 
