@@ -30,9 +30,7 @@ import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
 import type { Move } from '../toolpath/moves';
 import type { Timeline, TimelineSample } from '../toolpath/timeline';
-import type { Playback } from '../state/usePlayback';
 import { ignoreShortcut } from './keyboard';
-import { PlaybackBar } from './PlaybackBar';
 import './Workspace.css';
 import './Viewer3D.css';
 
@@ -42,14 +40,15 @@ type Viewer3DProps = {
   estimate: CutTimeEstimate;
   /** The 2D/3D switch, rendered at the start of the toolbar. */
   viewToggle: ReactNode;
-  /** Playback clock and timeline, shared with the other views (owned by `PlaybackWorkspace`). */
+  /** Timeline and playback sample, shared with the other views (owned by `PlaybackWorkspace`). */
   timeline: Timeline;
-  playback: Playback;
   sample: TimelineSample;
   /** Blocks of the move to highlight (`first` … `first + count − 1`), or null for none. */
   currentMove: { first: number; count: number } | null;
-  /** Previous/next move, for step-through; the buttons are hidden without it. */
-  onStep?: (direction: 1 | -1) => void;
+  /** The playback controls, rendered under the view. */
+  playbackBar: ReactNode;
+  /** True when ← and → step through moves (a program is open), for the hint. */
+  stepping: boolean;
 };
 
 /** Theme colors read from CSS custom properties on the workspace element. */
@@ -232,10 +231,10 @@ export default function Viewer3D({
   estimate,
   viewToggle,
   timeline,
-  playback,
   sample,
   currentMove,
-  onStep,
+  playbackBar,
+  stepping,
 }: Viewer3DProps) {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -829,10 +828,11 @@ export default function Viewer3D({
       <div className="viewer-3d" ref={hostRef}>
         {webglError && <p className="viewer-3d-message">3D view needs WebGL, which this browser has turned off or does not support.</p>}
       </div>
-      <PlaybackBar playback={playback} total={timeline.total} sample={sample} units={params.units} onStep={onStep} />
+      {playbackBar}
       <p className="hint">
-        Drag to orbit, right-drag (or Shift+drag) to pan, scroll to zoom; 1–4 pick a view. Space plays and pauses
-        {onStep ? '; ← and → step through moves.' : '.'}
+        Drag to orbit, right-drag (or Shift+drag) to pan, scroll to zoom; 1–4 pick a view. Space plays and pauses,
+        Home/End jump to the ends, + and − change speed{stepping ? ', ← and → step through moves' : ''}, Shift+← and
+        Shift+→ step one block.
       </p>
     </div>
   );

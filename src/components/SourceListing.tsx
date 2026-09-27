@@ -18,6 +18,12 @@ type SourceListingProps = {
   /** The most severe diagnostic on each line, if any. */
   markers: Map<number, Severity>;
   onSelectLine: (line: number) => void;
+  /** Lines with a breakpoint. */
+  breakpoints: Set<number>;
+  /** Adds or removes the breakpoint on a line (gutter click). */
+  onToggleBreakpoint: (line: number) => void;
+  /** Plays until a line is reached (Alt+click). */
+  onRunToLine: (line: number) => void;
   /** Scrolls this line into view when it changes (`key` repeats a request for the same line). */
   reveal: { line: number; key: number } | null;
 };
@@ -25,8 +31,19 @@ type SourceListingProps = {
 /**
  * The program's source with line numbers, virtualized: only the rows in
  * view (plus a margin) are in the DOM, so a 10⁵-line file scrolls smoothly.
+ * Clicking the line number toggles a breakpoint; clicking the text jumps
+ * there, or with Alt runs playback until it gets there.
  */
-export function SourceListing({ lines, currentLine, markers, onSelectLine, reveal }: SourceListingProps) {
+export function SourceListing({
+  lines,
+  currentLine,
+  markers,
+  onSelectLine,
+  breakpoints,
+  onToggleBreakpoint,
+  onRunToLine,
+  reveal,
+}: SourceListingProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [height, setHeight] = useState(0);
@@ -65,21 +82,36 @@ export function SourceListing({ lines, currentLine, markers, onSelectLine, revea
   const rows = [];
   for (let i = first; i < last; i++) {
     const severity = markers.get(i);
+    const breakpoint = breakpoints.has(i);
     rows.push(
-      <button
+      <div
         key={i}
-        type="button"
         className={i === currentLine ? 'source-row current' : 'source-row'}
         style={{ top: i * ROW, height: ROW }}
-        onClick={() => onSelectLine(i)}
         aria-current={i === currentLine ? 'step' : undefined}
       >
-        <span className="source-number" style={{ width: `${digits + 1}ch` }}>
-          {i + 1}
-        </span>
-        <span className={severity ? `source-marker severity-${severity}` : 'source-marker'} />
-        <code className="source-text">{lines[i]}</code>
-      </button>
+        <button
+          type="button"
+          className={breakpoint ? 'source-gutter breakpoint' : 'source-gutter'}
+          style={{ width: `${digits + 3}ch` }}
+          onClick={() => onToggleBreakpoint(i)}
+          aria-pressed={breakpoint}
+          aria-label={`Breakpoint on line ${i + 1}`}
+          title={breakpoint ? 'Remove breakpoint' : 'Add breakpoint: playback pauses here'}
+        >
+          <span className="source-breakpoint" />
+          <span className="source-number">{i + 1}</span>
+        </button>
+        <button
+          type="button"
+          className="source-line"
+          onClick={(e) => (e.altKey ? onRunToLine(i) : onSelectLine(i))}
+          title="Click to jump here; Alt+click to play until here"
+        >
+          <span className={severity ? `source-marker severity-${severity}` : 'source-marker'} />
+          <code className="source-text">{lines[i]}</code>
+        </button>
+      </div>
     );
   }
 
