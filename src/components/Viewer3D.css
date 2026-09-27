@@ -94,3 +94,9 @@
   color: var(--text-h);
   cursor: pointer;
 }
+
+.toolbar .toggle[aria-pressed='true'] {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
