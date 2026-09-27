@@ -110,13 +110,16 @@ Phase 5 is merged (PR #15): `PlaybackWorkspace` owns the one clock;
    it and pauses (pure helper `firstStopIn(stops, t0, t1)`, tested; a stop
    exactly at the current time does not re-trigger). Stops come from
    breakpoint lines (`timeline.moveStart[firstMoveByLine[line]]`) and,
-   when "Stop at problems" is on, diagnostic lines. Breakpoints are
+   when "Stop at problems" is on, diagnostic lines. `firstMoveByLine` is
+   −1 for lines after the last move (e.g. a trailing `M30`); drop those
+   rather than indexing `moveStart[-1]` (NaN would break the sorted
+   `stops` and the scrubber ticks). Breakpoints are
    transient `Set<number>` state in `PlaybackWorkspace`, cleared when the
    program closes.
 9. **Scrubber markers are bucketed.** A pure `scrubberBands(timeline, bins)`
    gives the dominant move kind per time bin (bins ≈ scrubber width in
    px, ≤ 2000), and `diagnosticTicks(timeline, lineMoves, diagnostics)`
-   gives unique (time, severity) ticks. Drawn on a `<canvas>` under the
+   gives unique (time, severity) ticks (same −1 rule as decision 8). Drawn on a `<canvas>` under the
    range input, so 10⁵ moves cost one draw, not 10⁵ elements.
 10. **2D viewport is pure.** `src/geometry/viewport.ts`:
     `ViewBox = { x, y, w, h }`, `zoomAt(vb, point, factor, limits)`
@@ -192,7 +195,8 @@ next one starts.
 ### PR 4 — `feat/playback-controls`
 
 1. Scrubber (decision 9): `src/toolpath/scrubber.ts` + tests (bands over
-   a known timeline, empty timeline, tick dedupe). Canvas under the range
+   a known timeline, empty timeline, tick dedupe, a diagnostic after the
+   last move gives no tick). Canvas under the range
    input in `PlaybackBar`, redrawn on resize and palette change.
 2. Speed: replace the `<select>` with a log slider (0.25×–500×) plus the
    current value; keep `PLAYBACK_SPEEDS` as detents/labels.
