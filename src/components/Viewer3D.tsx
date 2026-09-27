@@ -520,25 +520,26 @@ export default function Viewer3D({
     s.render();
   }, [orthographic]);
 
-  // Follow the bit: the camera and its target move with it each sample.
+  // Follow the bit: the view stays centered on it. Recentering (rather than
+  // adding the bit's movement) stays right when something else moves the
+  // camera at the same time, such as the reframe after a unit change.
   const [follow, setFollow] = useState(false);
   const followRef = useRef(follow);
-  const lastBitRef = useRef<THREE.Vector3 | null>(null);
-  /** Moves the camera and its target by `delta`, keeping the view direction. */
-  const panBy = useCallback((delta: THREE.Vector3) => {
+  /** Moves the camera and its target so the target is `point`, keeping the view direction and distance. */
+  const centerOn = useCallback((point: THREE.Vector3) => {
     const s = sceneRef.current;
-    if (!s || delta.lengthSq() === 0) return;
+    if (!s) return;
+    const delta = point.clone().sub(s.controls.target);
+    if (delta.lengthSq() === 0) return;
     s.camera.position.add(delta);
     s.controls.target.add(delta);
     s.controls.update();
   }, []);
   useEffect(() => {
     followRef.current = follow;
-    const bit = lastBitRef.current;
     const s = sceneRef.current;
-    // Turning it on centers the view on the bit.
-    if (follow && bit && s) panBy(bit.clone().sub(s.controls.target));
-  }, [follow, panBy]);
+    if (follow && s) centerOn(s.bit.position);
+  }, [follow, centerOn]);
 
   // View keys, only while the 3D view is shown: 1–4 pick a preset.
   useEffect(() => {
@@ -730,9 +731,7 @@ export default function Viewer3D({
     if (!s) return;
     const { position, block, kind } = sample;
     s.bit.position.set(position.x, position.y, position.z);
-    const bitNow = new THREE.Vector3(position.x, position.y, position.z);
-    if (followRef.current && lastBitRef.current) panBy(bitNow.clone().sub(lastBitRef.current));
-    lastBitRef.current = bitNow;
+    if (followRef.current) centerOn(s.bit.position);
     const played = Math.max(0, block);
     for (const k of KINDS) s.parts.traversed[k]?.geometry.setDrawRange(0, counts[k][played] * 2);
     const attr = s.current.geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -749,7 +748,7 @@ export default function Viewer3D({
     simulate();
     s.render();
     // `lines` and `palette` rebuild the traversed lines in (b), which start empty.
-  }, [sample, path, counts, lines, palette, layers, simulate, panBy]);
+  }, [sample, path, counts, lines, palette, layers, simulate, centerOn]);
 
   const status = [
     `${moves.length} move${moves.length === 1 ? '' : 's'}`,
