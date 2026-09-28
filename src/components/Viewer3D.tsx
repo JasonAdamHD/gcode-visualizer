@@ -27,12 +27,12 @@ import { StockSimulator } from '../sim/stockSim';
 import { useLayers } from '../state/useLayers';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
-import type { Move } from '../toolpath/moves';
+import type { Move, Point3 } from '../toolpath/moves';
 import type { Timeline, TimelineSample } from '../toolpath/timeline';
 import { ignoreShortcut } from './keyboard';
 import { StockView } from './stockView';
 import { ChipView } from './chipView';
-import { chipsForVolume } from '../sim/chips';
+import { chipLoad, chipsCut, cutConditions } from '../toolpath/chipLoad';
 import { useExactCut } from './useExactCut';
 import './Workspace.css';
 import './Viewer3D.css';
@@ -621,21 +621,37 @@ export default function Viewer3D({
   const playingRef = useRef(playing);
   // Fractions of a chip carried to the next frame, so slow cuts still throw some.
   const chipCarry = useRef(0);
+  // Where the bit was at the last slice, for the distance cut since.
+  const lastTipRef = useRef<Point3 | null>(null);
   const flute = params.bit.flute;
   const bitDiameter = params.bit.diameter;
   const fluteRef = useRef(flute);
-  const bitDiameterRef = useRef(bitDiameter);
+  const paramsRef = useRef(params);
+  /**
+   * Throws the chips the bit cut since the last slice: one per tooth pass
+   * over the distance moved, sized from the chip load and the depth it
+   * engaged (`chipsCut`), at most MAX_CHIPS_PER_FRAME (beyond that each
+   * flake stands for several chips).
+   */
   const throwChips = useCallback(
-    (s: SceneState, volume: number, target: CutTarget) => {
-      if (volume <= 0) return;
-      const wanted = chipsForVolume(volume, bitDiameterRef.current) + chipCarry.current;
+    (s: SceneState, volume: number, target: CutTarget, from: Point3) => {
+      const p = paramsRef.current;
+      const block = timeline.blocks[Math.max(0, target.block)];
+      const move = block ? timeline.moves[block.move] : undefined;
+      const conditions = move ? cutConditions(move, p) : null;
+      if (!block || !conditions) return;
+      const load = chipLoad(conditions.feedRate, conditions.rpm, p.bit.fluteCount);
+      const distance = Math.hypot(target.position.x - from.x, target.position.y - from.y, target.position.z - from.z);
+      const cut = chipsCut(volume, distance, load, p.bit.diameter);
+      if (!cut) return;
+      const wanted = cut.count + chipCarry.current;
       const n = Math.min(MAX_CHIPS_PER_FRAME, Math.floor(wanted));
       chipCarry.current = n === MAX_CHIPS_PER_FRAME ? 0 : wanted - n;
-      const u = timeline.blocks[Math.max(0, target.block)]?.u ?? { x: 0, y: 0, z: 0 };
-      const xy = Math.hypot(u.x, u.y);
+      const xy = Math.hypot(block.u.x, block.u.y);
       s.chips.emit(n, {
         tip: target.position,
-        travel: xy > 1e-6 ? { x: u.x / xy, y: u.y / xy } : { x: 0, y: 0 },
+        travel: xy > 1e-6 ? { x: block.u.x / xy, y: block.u.y / xy } : { x: 0, y: 0 },
+        chip: cut.size,
         flute: fluteRef.current,
       });
     },
@@ -664,10 +680,12 @@ export default function Viewer3D({
         flushStock(st, result.dirty);
       } while (!result.done && performance.now() - start < SIM_FRAME_MS);
       // Chips for what this frame of playback cut; not for catching up after a seek.
-      if (playingRef.current && !restored && layersRef.current.chips) {
+      const from = lastTipRef.current;
+      if (playingRef.current && !restored && layersRef.current.chips && from) {
         const volume = (st.stock.removed - removedBefore) * st.stock.dx * st.stock.dy;
-        throwChips(s, volume, target);
+        throwChips(s, volume, target, from);
       }
+      lastTipRef.current = result.done ? target.position : null;
       s.render();
       if (result.done) {
         setSimProgress(null);
@@ -715,8 +733,8 @@ export default function Viewer3D({
   useEffect(() => {
     playingRef.current = playing;
     fluteRef.current = flute;
-    bitDiameterRef.current = bitDiameter;
-  }, [playing, flute, bitDiameter]);
+    paramsRef.current = params;
+  }, [playing, flute, params]);
 
   // The chips' world follows the job; hiding them clears them.
   const unitsPerMeter = params.units === 'mm' ? 1000 : 1000 / 25.4;

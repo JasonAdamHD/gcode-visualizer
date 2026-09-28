@@ -22,6 +22,7 @@ export type ChipWorld = {
   surfaceAt: SurfaceAt;
   /** Chips falling off the sheet are dropped below this height. */
   lowest: number;
+  /** Bit diameter: chips leave from its edge. */
   bitDiameter: number;
 };
 
@@ -41,8 +42,8 @@ export class ChipView {
 
   constructor(render: () => void) {
     this.render = render;
-    // A thin flake, sized per chip from the bit diameter.
-    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.6, 0.15), new THREE.MeshLambertMaterial(), CHIP_CAPACITY);
+    // A unit box, scaled per chip to its length, width and thickness.
+    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial(), CHIP_CAPACITY);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
@@ -91,21 +92,21 @@ export class ChipView {
     this.frame = 0;
     const dt = Math.min(MAX_STEP, (now - this.last) / 1000);
     this.last = now;
-    const { unitsPerMeter, surfaceAt, lowest, bitDiameter } = this.world;
+    const { unitsPerMeter, surfaceAt, lowest } = this.world;
     stepChips(this.chips, dt, unitsPerMeter, surfaceAt, lowest);
-    this.writeInstances(bitDiameter);
+    this.writeInstances();
     this.render();
     if (this.chips.count > 0) this.frame = requestAnimationFrame(this.tick);
   };
 
-  private writeInstances(bitDiameter: number) {
+  private writeInstances() {
     const c = this.chips;
     for (let k = 0; k < c.count; k++) {
       const i = k * 3;
       axis.set(c.axis[i], c.axis[i + 1], c.axis[i + 2]);
       spin.setFromAxisAngle(axis, chipAngle(c, k));
-      const s = c.size[k] * bitDiameter * chipScale(c, k);
-      scale.set(s, s, s);
+      const f = chipScale(c, k);
+      scale.set(c.dims[i] * f, c.dims[i + 1] * f, c.dims[i + 2] * f);
       position.set(c.pos[i], c.pos[i + 1], c.pos[i + 2]);
       matrix.compose(position, spin, scale);
       this.mesh.setMatrixAt(k, matrix);

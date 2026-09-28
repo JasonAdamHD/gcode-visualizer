@@ -15,6 +15,7 @@ import {
 } from '../state/playbackSpeed';
 import type { Playback } from '../state/usePlayback';
 import { formatDuration } from '../toolpath/estimate';
+import type { ChipLoadRating } from '../toolpath/chipLoad';
 import type { ScrubberTick } from '../toolpath/scrubber';
 import { BAND_CUT, BAND_RAPID, BAND_VERTICAL, scrubberBands } from '../toolpath/scrubber';
 import type { Timeline, TimelineSample } from '../toolpath/timeline';
@@ -32,6 +33,17 @@ type PlaybackBarProps = {
   breakpoints?: Float64Array;
   /** Jumps to the previous (−1) or next (1) move; the step buttons are shown only with it. */
   onStep?: (direction: 1 | -1) => void;
+  /**
+   * The current cutting move's chip load (units per tooth), its rating (null
+   * when not rated, e.g. a plunge) and chips per second; null when not cutting.
+   */
+  chipLoad?: { load: number | null; rating: ChipLoadRating | null; perSecond: number } | null;
+};
+
+const RATING_TEXT: Record<ChipLoadRating, string> = {
+  low: 'low: rubbing, burning',
+  ok: 'ok',
+  high: 'high: heavy load',
 };
 
 const KIND_LABELS: Record<NonNullable<TimelineSample['kind']>, string> = {
@@ -53,6 +65,7 @@ export function PlaybackBar({
   ticks = NO_TICKS,
   breakpoints = NO_BREAKPOINTS,
   onStep,
+  chipLoad = null,
 }: PlaybackBarProps) {
   const { time, playing, speed } = playback;
   const total = timeline.total;
@@ -117,6 +130,17 @@ export function PlaybackBar({
       <span className="playback-readout">
         {sample.kind ? KIND_LABELS[sample.kind] : 'Idle'} · X {coord(sample.position.x)} Y {coord(sample.position.y)} Z{' '}
         {coord(sample.position.z)} {units} · F {Math.round(sample.speed * 60)} {units}/min
+        {chipLoad && (
+          <span
+            className={chipLoad.rating ? `chip-load chip-load-${chipLoad.rating}` : 'chip-load'}
+            title="Chip load: feed ÷ (spindle speed × flutes), rated against a rule-of-thumb band for wood (1.5–5 % of the bit diameter per tooth)"
+          >
+            {' · '}
+            {chipLoad.load === null
+              ? 'spindle stopped'
+              : `${chipLoad.load.toFixed(decimals)} ${units}/tooth${chipLoad.rating ? ` (${RATING_TEXT[chipLoad.rating]})` : ''} · ${Math.round(chipLoad.perSecond)} chips/s`}
+          </span>
+        )}
       </span>
     </div>
   );
