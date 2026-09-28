@@ -62,6 +62,13 @@ npm run check        # lint + build + test: run before every commit
   tool library exports (flat, ball, bull nose as flat, chamfer mill `TA`
   half angle and counter sink `SIG` point angle as V-bits; other types are
   skipped with a reason) and `readToolFile` tells the two formats apart.
+- `src/machine/tooling.ts`: which bit cuts each move (`Tooling`: the
+  job's bits and an index per move). A drawing uses the params' bit; a
+  program's T/M6 tool numbers are looked up in the library (converted to
+  the job's units), with the params' bit before the first change and for
+  unknown numbers (flagged `unknown-tool` in `App`). Anything that cuts
+  (stock simulation, exact cut, chips, the chip-load readout, the 3D bit)
+  takes the bit per move from here, never `params.bit` directly.
 - `src/toolpath/` turns the drawing into machine motion (pure, tested):
   - `offset.ts`: cutter compensation. The **only** module that imports
     `cavalier-contours-js` (pinned exact); never offset paths by hand.
@@ -204,7 +211,7 @@ npm run check        # lint + build + test: run before every commit
     meaning. Kept separate from the interpreter so a controller dialect
     layer can sit between them later.
   - `parse.ts`: `parseGcode(text, start)`, the modal interpreter (GRBL
-    semantics: G0–G3 in XY, G17, G20/G21, G90/G91, F, S) producing `Move[]`
+    semantics: G0–G3 in XY, G17, G20/G21, G90/G91, F, S, T/M6) producing `Move[]`
     and diagnostics. The first G20/G21 sets the program's units (mm if
     none); arcs over 180° are split in two; every other word is reported,
     never silently ignored. `sourceLines` numbers lines the same way.

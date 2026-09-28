@@ -44,13 +44,29 @@ export type SegmentList = Float64Array;
  * further than the tolerance the planner already used to chord arcs.
  */
 export function cuttingSegments(strokes: readonly ExactStroke[], tolerance: number): SegmentList {
+  return cuttingSegmentsByTool(strokes, tolerance, () => 0).segments;
+}
+
+/**
+ * `cuttingSegments` for a job that changes tools: `toolOf(i)` is the tool
+ * index of stroke `i`, a run is never merged across a tool change, and
+ * `tools[k]` is segment `k`'s tool index.
+ */
+export function cuttingSegmentsByTool(
+  strokes: readonly ExactStroke[],
+  tolerance: number,
+  toolOf: (stroke: number) => number
+): { segments: SegmentList; tools: Uint16Array } {
   const out: number[] = [];
+  const tools: number[] = [];
   let run: Point3[] = [];
+  let runTool = 0;
   const flush = () => {
     if (run.length >= 2) {
       const a = run[0];
       const b = run[run.length - 1];
       out.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      tools.push(runTool);
     }
     run = [];
   };
@@ -59,23 +75,25 @@ export function cuttingSegments(strokes: readonly ExactStroke[], tolerance: numb
     y: s.from.y + s.u.y * s.length,
     z: s.from.z + s.u.z * s.length,
   });
-  for (const s of strokes) {
+  strokes.forEach((s, i) => {
     const to = end(s);
     if (s.from.z >= 0 && to.z >= 0) {
       flush();
-      continue;
+      return;
     }
+    const tool = toolOf(i);
     const last = run[run.length - 1];
-    const continues = last && Math.hypot(last.x - s.from.x, last.y - s.from.y, last.z - s.from.z) <= 1e-9;
+    const continues = last && tool === runTool && Math.hypot(last.x - s.from.x, last.y - s.from.y, last.z - s.from.z) <= 1e-9;
     if (continues && run.length < MAX_RUN && run.every((p) => distanceToSegment(p, run[0], to) <= tolerance)) {
       run.push(to);
-      continue;
+      return;
     }
     flush();
     run = [s.from, to];
-  }
+    runTool = tool;
+  });
   flush();
-  return Float64Array.from(out);
+  return { segments: Float64Array.from(out), tools: Uint16Array.from(tools) };
 }
 
 /**
@@ -83,7 +101,7 @@ export function cuttingSegments(strokes: readonly ExactStroke[], tolerance: numb
  * its bytes), so a job rebuilt with identical segments can be recognized
  * without keeping and comparing the old ones.
  */
-export function segmentsKey(segments: SegmentList): string {
+export function segmentsKey(segments: ArrayBufferView & { length: number }): string {
   const bytes = new Uint8Array(segments.buffer, segments.byteOffset, segments.byteLength);
   let hash = 0x811c9dc5;
   for (let k = 0; k < bytes.length; k++) {
@@ -125,8 +143,10 @@ export function toolPoints(bit: ExactBit, height: number, tolerance: number): Ve
 
 export type ExactCutInput = {
   sheet: MachineParams['sheet'];
-  bit: ExactBit;
+  /** The job's bits; `tools[k]` picks segment `k`'s (all `bits[0]` without `tools`). */
+  bits: ExactBit[];
   segments: SegmentList;
+  tools?: Uint16Array;
   /** How far the bit's circles may stray from round, in world units. */
   tolerance: number;
 };
@@ -141,13 +161,14 @@ export type ExactCutMesh = { positions: Float32Array; indices: Uint32Array; volu
  */
 export function exactCut(wasm: ManifoldToplevel, input: ExactCutInput, onProgress?: (fraction: number) => void): ExactCutMesh {
   const { Manifold } = wasm;
-  const { sheet, bit, segments, tolerance } = input;
+  const { sheet, bits, segments, tools, tolerance } = input;
   const n = segments.length / 6;
 
   // Tall enough that the bit's top clears the sheet top from its lowest tip.
   let lowest = 0;
   for (let k = 0; k < n; k++) lowest = Math.min(lowest, segments[k * 6 + 2], segments[k * 6 + 5]);
-  const tool = toolPoints(bit, -lowest + bit.diameter, tolerance);
+  // Each bit's outline, made once and shared by its segments.
+  const outlines = bits.map((bit) => toolPoints(bit, -lowest + bit.diameter, tolerance));
 
   const owned: { delete(): void }[] = [];
   const track = <T extends { delete(): void }>(m: T): T => {
@@ -164,7 +185,7 @@ export function exactCut(wasm: ManifoldToplevel, input: ExactCutInput, onProgres
         for (let k = start; k < Math.min(n, start + BATCH); k++) {
           const o = k * 6;
           const pts: Vec3[] = [];
-          for (const [x, y, z] of tool) {
+          for (const [x, y, z] of outlines[tools?.[k] ?? 0]) {
             pts.push([x + segments[o], y + segments[o + 1], z + segments[o + 2]]);
             pts.push([x + segments[o + 3], y + segments[o + 4], z + segments[o + 5]]);
           }

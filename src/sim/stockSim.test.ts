@@ -8,7 +8,7 @@ import { DEFAULT_PARAMS } from '../machine/params';
 import type { Move, Point3 } from '../toolpath/moves';
 import type { Timeline } from '../toolpath/timeline';
 import { buildTimeline, sampleTimeline } from '../toolpath/timeline';
-import { createStock, denseHeights } from './stock';
+import { createStock, denseHeights, heightAt } from './stock';
 import type { StockSimulatorOptions } from './stockSim';
 import { StockSimulator } from './stockSim';
 
@@ -44,7 +44,7 @@ const moves: Move[] = [
 const timeline = buildTimeline(moves, params);
 
 const simulator = (tl: Timeline = timeline, options?: StockSimulatorOptions) =>
-  new StockSimulator(tl, createStock(params.sheet, params.bit), params.bit, options);
+  new StockSimulator(tl, createStock(params.sheet, params.bit), () => params.bit, options);
 
 /** Heights after cutting uncut stock straight to `t`. */
 function fromScratch(t: number, tl: Timeline = timeline): Float32Array {
@@ -69,6 +69,34 @@ function random(seed: number) {
 }
 
 describe('StockSimulator', () => {
+  it('cuts each move with its own bit', () => {
+    // Two parallel slots: the first with a 6 mm bit, the second with a 2 mm one.
+    const twoTools: Move[] = [
+      { kind: 'plunge', from: p(10, 10, 5), to: p(10, 10, -2) },
+      { kind: 'feed', from: p(10, 10, -2), to: p(50, 10, -2) },
+      { kind: 'retract', from: p(50, 10, -2), to: p(50, 30, 5) },
+      { kind: 'plunge', from: p(50, 30, 5), to: p(50, 30, -2) },
+      { kind: 'feed', from: p(50, 30, -2), to: p(10, 30, -2) },
+    ];
+    const tl = buildTimeline(twoTools, params);
+    const small = { ...params.bit, diameter: 2, shape: { kind: 'flat' } as const };
+    const big = { ...params.bit, diameter: 6, shape: { kind: 'flat' } as const };
+    const sim = new StockSimulator(tl, createStock(params.sheet, small), (m) => (m < 3 ? big : small));
+    sim.advanceTo(sampleTimeline(tl, tl.total));
+    const width = (y: number) => {
+      let n = 0;
+      for (let j = 0; j < sim.stock.ny; j++) {
+        const yy = j * sim.stock.dy;
+        if (Math.abs(yy - y) < 5 && heightAt(sim.stock, Math.round(30 / sim.stock.dx), j) < 0) n++;
+      }
+      return (n - 1) * sim.stock.dy;
+    };
+    expect(width(10)).toBeGreaterThan(5.5);
+    expect(width(10)).toBeLessThanOrEqual(6);
+    expect(width(30)).toBeGreaterThan(1.5);
+    expect(width(30)).toBeLessThanOrEqual(2);
+  });
+
   it('cuts nothing at the start and something by the end', () => {
     expect(fromScratch(0).every((h) => h === 0)).toBe(true);
     const end = fromScratch(timeline.total);

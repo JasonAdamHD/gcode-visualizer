@@ -7,6 +7,8 @@ import type { ReactNode } from 'react';
 import type { Diagnostic } from '../gcode/diagnostics';
 import { firstMoveByLine } from '../gcode/step';
 import type { MachineParams } from '../machine/params';
+import type { Tooling } from '../machine/tooling';
+import { bitOfMove } from '../machine/tooling';
 import { usePlayback } from '../state/usePlayback';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import type { Move } from '../toolpath/moves';
@@ -43,6 +45,8 @@ type PlaybackWorkspaceProps = {
   viewToggle: ReactNode;
   moves: Move[];
   params: MachineParams;
+  /** Which bit cuts each move. */
+  tooling: Tooling;
   estimate: CutTimeEstimate;
   /** The open program, or null when playing the drawing's moves (3D only). */
   program: WorkspaceProgram | null;
@@ -62,7 +66,7 @@ const NO_LINES: number[] = [];
  * problem seeks to it, and breakpoints (and optionally every problem)
  * pause playback. Breakpoints last until another file is opened.
  */
-export function PlaybackWorkspace({ view, viewToggle, moves, params, estimate, program }: PlaybackWorkspaceProps) {
+export function PlaybackWorkspace({ view, viewToggle, moves, params, tooling, estimate, program }: PlaybackWorkspaceProps) {
   const timeline = useMemo(() => buildTimeline(moves, params), [moves, params]);
 
   const blockStarts = useMemo(() => moveBlockStarts(timeline), [timeline]);
@@ -185,13 +189,14 @@ export function PlaybackWorkspace({ view, viewToggle, moves, params, estimate, p
   // Chip load of the move being played, when it cuts.
   const playedMove = sample.moveIndex >= 0 ? moves[sample.moveIndex] : undefined;
   const conditions = playedMove ? cutConditions(playedMove, params) : null;
-  const flutes = params.bit.fluteCount;
+  const playedBit = sample.moveIndex >= 0 ? bitOfMove(tooling, sample.moveIndex) : params.bit;
+  const flutes = playedBit.fluteCount;
   const load = conditions ? chipLoad(conditions.feedRate, conditions.rpm, flutes) : null;
   const chipLoadInfo = conditions
     ? {
         load,
         // The band is for side cutting; plunging normally runs lighter, so it is not rated.
-        rating: load === null || playedMove?.kind === 'plunge' ? null : rateChipLoad(load, params.bit.diameter),
+        rating: load === null || playedMove?.kind === 'plunge' ? null : rateChipLoad(load, playedBit.diameter),
         perSecond: chipsPerSecond(conditions.rpm, flutes),
       }
     : null;
@@ -220,6 +225,7 @@ export function PlaybackWorkspace({ view, viewToggle, moves, params, estimate, p
               estimate={estimate}
               viewToggle={viewToggle}
               timeline={timeline}
+              tooling={tooling}
               sample={sample}
               currentMove={currentBlocks}
               playbackBar={playbackBar}

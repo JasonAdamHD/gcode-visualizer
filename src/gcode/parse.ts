@@ -49,6 +49,10 @@ type Block = {
   plane?: 17 | 18 | 19;
   values: Partial<Record<'X' | 'Y' | 'Z' | 'I' | 'J' | 'R' | 'F' | 'S', number>>;
   unsupported: string[];
+  /** A T word: the tool to change to. */
+  tool?: number;
+  /** An M6: change to the selected tool now. */
+  toolChange: boolean;
   /** The line has a G-code (G28, G53, …) that consumes its axis words, so they are not a move. */
   axisWordsUsed: boolean;
 };
@@ -57,7 +61,7 @@ type BlockResult = { block: Block } | { error: { code: DiagnosticCode; message: 
 
 /** Groups a line's words by modal group and value letter, rejecting duplicates. */
 function readBlock(line: TokenizedLine): BlockResult {
-  const block: Block = { values: {}, unsupported: [], axisWordsUsed: false };
+  const block: Block = { values: {}, unsupported: [], toolChange: false, axisWordsUsed: false };
   const groups = new Map<string, string>();
   const setGroup = (group: string, text: string): BlockResult | null => {
     const other = groups.get(group);
@@ -101,11 +105,21 @@ function readBlock(line: TokenizedLine): BlockResult {
         return { error: { code: 'duplicate-word', message: `${letter} appears twice on one line` } };
       }
       block.values[letter] = value;
+    } else if (letter === 'T') {
+      if (block.tool !== undefined) return { error: { code: 'duplicate-word', message: 'T appears twice on one line' } };
+      block.tool = value;
+    } else if (letter === 'M' && value === 6) {
+      block.toolChange = true;
     } else {
       block.unsupported.push(text);
     }
   }
   return { block };
+}
+
+/** True when the file has an M6 anywhere: then T only selects and M6 changes; otherwise T changes at once. */
+function usesToolChange(lines: TokenizedLine[]): boolean {
+  return lines.some((line) => !line.error && line.words.some((w) => w.letter === 'M' && w.value === 6));
 }
 
 /** The first G20/G21 in the file decides the program's units; mm (GRBL's default) if there is none. */
@@ -212,6 +226,10 @@ export function sourceLines(text: string): string[] {
  * plunges carry the modal F as `feedRate` and the modal S as
  * `spindleRpm` once each is set. (M3/M4/M5 are still reported as
  * unsupported: S is taken as the speed whether or not the spindle is on.)
+ * Every move carries the tool in the spindle as `tool` once there is one:
+ * with an M6 anywhere in the file, T selects and M6 changes (GRBL/Fusion
+ * style, `T2 M6`); in a file with no M6, a T word changes the tool itself.
+ * T0 is a tool number like any other.
  */
 export function parseGcode(text: string, start: StartPosition): GcodeProgram {
   const lines = sourceLines(text).map(tokenize);
@@ -234,6 +252,10 @@ export function parseGcode(text: string, start: StartPosition): GcodeProgram {
   let plane: 17 | 18 | 19 = 17;
   let feedRate: number | undefined;
   let spindleRpm: number | undefined;
+  // The tool in the spindle, and the one a T word selected for the next M6.
+  let tool: number | undefined;
+  let selectedTool: number | undefined;
+  const withM6 = usesToolChange(lines);
   let unitsSet = false;
   let moved = false;
   let missingFeedReported = false;
@@ -241,6 +263,7 @@ export function parseGcode(text: string, start: StartPosition): GcodeProgram {
   const emit = (line: number, kind: Move['kind'], to: Point3, bulge?: number) => {
     if (!bulge && samePoint(pos, to)) return;
     const move: Move = { kind, from: pos, to, sourceLine: line };
+    if (tool !== undefined) move.tool = tool;
     if (bulge) move.bulge = bulge;
     if (kind === 'feed' || kind === 'plunge') {
       if (feedRate !== undefined) move.feedRate = feedRate;
@@ -282,6 +305,12 @@ export function parseGcode(text: string, start: StartPosition): GcodeProgram {
       if (values.S >= 0) spindleRpm = values.S;
       else report(line, 'error', 'invalid-spindle', `Spindle speed S${values.S} must not be negative; ignored`);
     }
+    if (block.tool !== undefined) {
+      if (Number.isInteger(block.tool) && block.tool >= 0) selectedTool = block.tool;
+      else report(line, 'error', 'invalid-tool', `Tool number T${block.tool} must be a whole number; ignored`);
+    }
+    // With M6 in the file, T only selects and M6 changes (T and M6 may share a line); without it, T changes at once.
+    if ((withM6 ? block.toolChange : block.tool !== undefined) && selectedTool !== undefined) tool = selectedTool;
     for (const word of block.unsupported) {
       const detail = block.axisWordsUsed ? '; the axis words on this line are ignored too' : '';
       report(line, 'warning', 'unsupported-word', `${word} is not supported and was ignored${detail}`);

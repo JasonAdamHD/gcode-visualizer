@@ -84,6 +84,21 @@ describe('parseGcode: kinds', () => {
     expect(moves.map((m) => m.spindleRpm)).toEqual([undefined, undefined, 12000, 9000, 0]);
   });
 
+  it('changes tools at M6 when the file has one, on the same line or after the T', () => {
+    const { moves } = parse(['G21', 'G0 X1', 'T2', 'G0 X2', 'M6', 'G0 X3', 'T3 M6', 'G0 X4']);
+    expect(moves.map((m) => m.tool)).toEqual([undefined, undefined, 2, 3]);
+  });
+
+  it('changes tools at the T word in a file without M6', () => {
+    const { moves } = parse(['G21', 'G0 X1', 'T2', 'G0 X2', 'T5 G0 X3']);
+    expect(moves.map((m) => m.tool)).toEqual([undefined, 2, 5]);
+  });
+
+  it('carries the tool on every kind of move', () => {
+    const { moves } = parse(['G21', 'T1 M6', 'G0 X1', 'G1 Z-1 F100', 'G1 X2', 'G0 Z5']);
+    expect(moves.every((m) => m.tool === 1)).toBe(true);
+  });
+
   it('carries the feed rate on feeds and plunges only', () => {
     const { moves } = parse(['G21', 'G0 X1', 'G1 Z-1 F50', 'G1 X2 F300', 'G0 Z5']);
     expect(moves.map((m) => m.feedRate)).toEqual([undefined, 50, 300, undefined]);
@@ -251,6 +266,8 @@ describe('parseGcode: diagnostics', () => {
     ['an arc outside the XY plane', ['G21 F100 G18', 'G2 X10 I5'], 'arc-plane'],
     ['a zero feed rate', ['G21 F0'], 'invalid-feed'],
     ['a negative spindle speed', ['G21 S-100'], 'invalid-spindle'],
+    ['a fractional tool number', ['G21 T1.5'], 'invalid-tool'],
+    ['two T words on a line', ['G21', 'T1 T2'], 'duplicate-word'],
   ])('reports %s as an error on its line', (_, lines, code) => {
     const found = parse(lines).diagnostics.filter((d) => d.severity === 'error');
     expect(found).toEqual([expect.objectContaining({ line: lines.length - 1, code })]);
@@ -278,7 +295,7 @@ describe('parseGcode: diagnostics', () => {
   it('warns about each unsupported word and still runs the motion', () => {
     const program = parse(['G21', 'M3 S12000 T1 G54 G1 X5 F100']);
     const warnings = program.diagnostics.filter((d) => d.code === 'unsupported-word');
-    expect(warnings.map((d) => d.message.split(' ')[0])).toEqual(['M3', 'T1', 'G54']);
+    expect(warnings.map((d) => d.message.split(' ')[0])).toEqual(['M3', 'G54']);
     expect(program.moves[0].spindleRpm).toBe(12000);
     expect(warnings.every((d) => d.severity === 'warning' && d.line === 1)).toBe(true);
     expect(program.moves).toHaveLength(1);

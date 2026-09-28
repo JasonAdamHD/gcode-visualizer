@@ -12,6 +12,8 @@ import type { ReactNode, RefObject } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { MachineParams } from '../machine/params';
+import type { Tooling } from '../machine/tooling';
+import { bitOfMove, diameterRange } from '../machine/tooling';
 import { unitFactor } from '../machine/params';
 import type { Bounds3, CameraPose, CameraPreset } from '../sim/camera';
 import { CAMERA_PRESETS, cameraPose, framePose, jobBounds, orthoHalfHeight } from '../sim/camera';
@@ -45,6 +47,8 @@ type Viewer3DProps = {
   viewToggle: ReactNode;
   /** Timeline and playback sample, shared with the other views (owned by `PlaybackWorkspace`). */
   timeline: Timeline;
+  /** Which bit cuts each move (a program can change tools). */
+  tooling: Tooling;
   sample: TimelineSample;
   /** Blocks of the move to highlight (`first` … `first + count − 1`), or null for none. */
   currentMove: { first: number; count: number } | null;
@@ -220,6 +224,8 @@ type SceneState = {
   exactGroup: THREE.Group;
   chips: ChipView;
   bit: THREE.Mesh;
+  /** The bit's shape for each of the job's tools (`Tooling.bits`); the bit shows the current move's. */
+  bitShapes: THREE.BufferGeometry[];
   /** The played part of the current block, from its start to the bit. */
   current: Line;
   /** The whole current move (step-through), a draw range over the path buffer. */
@@ -242,6 +248,7 @@ export default function Viewer3D({
   estimate,
   viewToggle,
   timeline,
+  tooling,
   sample,
   currentMove,
   playbackBar,
@@ -256,7 +263,7 @@ export default function Viewer3D({
   const palette = usePalette(workspaceRef);
   const [layers, toggleLayer] = useLayers();
   // The exact finished part, computed in the background while the stock is shown.
-  const exact = useExactCut(timeline, params.sheet, params.bit, params.units, layers.stock);
+  const exact = useExactCut(timeline, params.sheet, tooling, params.units, layers.stock);
   // At the end of the job the exact part replaces the simulated stock.
   const exactShown = layers.stock && atEnd && exact.status === 'ready';
 
@@ -344,6 +351,7 @@ export default function Viewer3D({
       exactGroup,
       chips,
       bit,
+      bitShapes: [],
       current,
       moveOverlay,
       render,
@@ -354,6 +362,8 @@ export default function Viewer3D({
     return () => {
       sceneRef.current = null;
       chips.dispose();
+      // Every tool's bit shape, not only the one on the mesh that clearGroup below reaches.
+      for (const g of state.bitShapes) g.dispose();
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
@@ -368,7 +378,6 @@ export default function Viewer3D({
   const sheetY = params.sheet.y;
   const thickness = params.sheet.thickness;
   const safeHeight = params.safeHeight;
-  const bitParams = params.bit;
 
   /**
    * Moves the active camera to `pose`. Clip planes scale with the
@@ -463,17 +472,20 @@ export default function Viewer3D({
     }
     s.parts = parts;
 
-    s.bit.geometry.dispose();
-    const profile = bitProfile(bitParams.shape, bitParams.diameter, BIT_LENGTH_DIAMETERS * bitParams.diameter);
-    s.bit.geometry = new THREE.LatheGeometry(
-      profile.map((q) => new THREE.Vector2(q.x, q.y)),
-      32
-    );
+    for (const g of s.bitShapes) g.dispose();
+    s.bitShapes = tooling.bits.map((b) => {
+      const profile = bitProfile(b.shape, b.diameter, BIT_LENGTH_DIAMETERS * b.diameter);
+      return new THREE.LatheGeometry(
+        profile.map((q) => new THREE.Vector2(q.x, q.y)),
+        32
+      );
+    });
+    s.bit.geometry = s.bitShapes[0];
     (s.bit.material as THREE.MeshLambertMaterial).color.set(palette.bit);
     s.current.material.color.set(palette.traversed);
     s.moveOverlay.material.color.set(palette.current);
     s.render();
-  }, [lines, palette, sheetX, sheetY, thickness, params.units, bitParams]);
+  }, [lines, palette, sheetX, sheetY, thickness, params.units, tooling]);
 
   // Layers only toggle `visible`; nothing is rebuilt. The sheet's slab
   // gives way to the stock while the stock is shown.
@@ -623,9 +635,6 @@ export default function Viewer3D({
   const chipCarry = useRef(0);
   // Where the bit was at the last slice, for the distance cut since.
   const lastTipRef = useRef<Point3 | null>(null);
-  const flute = params.bit.flute;
-  const bitDiameter = params.bit.diameter;
-  const fluteRef = useRef(flute);
   const paramsRef = useRef(params);
   /**
    * Throws the chips the bit cut since the last slice: one per tooth pass
@@ -640,9 +649,10 @@ export default function Viewer3D({
       const move = block ? timeline.moves[block.move] : undefined;
       const conditions = move ? cutConditions(move, p) : null;
       if (!block || !conditions) return;
-      const load = chipLoad(conditions.feedRate, conditions.rpm, p.bit.fluteCount);
+      const bit = bitOfMove(tooling, block.move);
+      const load = chipLoad(conditions.feedRate, conditions.rpm, bit.fluteCount);
       const distance = Math.hypot(target.position.x - from.x, target.position.y - from.y, target.position.z - from.z);
-      const cut = chipsCut(volume, distance, load, p.bit.diameter);
+      const cut = chipsCut(volume, distance, load, bit.diameter);
       if (!cut) return;
       const wanted = cut.count + chipCarry.current;
       const n = Math.min(MAX_CHIPS_PER_FRAME, Math.floor(wanted));
@@ -652,10 +662,11 @@ export default function Viewer3D({
         tip: target.position,
         travel: xy > 1e-6 ? { x: block.u.x / xy, y: block.u.y / xy } : { x: 0, y: 0 },
         chip: cut.size,
-        flute: fluteRef.current,
+        bitDiameter: bit.diameter,
+        flute: bit.flute,
       });
     },
-    [timeline]
+    [timeline, tooling]
   );
 
   const simulateSlice = useCallback(
@@ -702,18 +713,19 @@ export default function Viewer3D({
     if (!simFrameRef.current) simulateSlice();
   }, [simulateSlice]);
 
-  // Fine enough for the bit, coarsened only if this job's cuts would not fit the budget.
-  const grid = useMemo(
-    () => stockGrid({ x: sheetX, y: sheetY, thickness }, bitParams, timeline.blocks),
-    [sheetX, sheetY, thickness, bitParams, timeline]
-  );
+  // Fine enough for the job's smallest bit, coarsened only if its cuts would not fit the budget.
+  const grid = useMemo(() => {
+    const { min, max } = diameterRange(tooling);
+    const smallest = tooling.bits.find((b) => b.diameter === min) ?? tooling.bits[0];
+    return stockGrid({ x: sheetX, y: sheetY, thickness }, smallest, timeline.blocks, max / 2);
+  }, [sheetX, sheetY, thickness, tooling, timeline]);
 
   // (d) A fresh stock whenever the job, sheet or bit change.
   useEffect(() => {
     const s = sceneRef.current;
     if (!s) return;
     const stock = stockFromGrid({ x: sheetX, y: sheetY, thickness }, grid);
-    const sim = new StockSimulator(timeline, stock, bitParams);
+    const sim = new StockSimulator(timeline, stock, (m) => bitOfMove(tooling, m));
     const view = new StockView(stock, stockColors(), paletteRef.current?.stock ?? '#e2cfae');
     s.stockGroup.add(view.group);
     stockRef.current = { stock, sim, view };
@@ -728,13 +740,12 @@ export default function Viewer3D({
       // On unmount (a) has already disposed the renderer; only redraw a live scene.
       if (sceneRef.current === s) s.render();
     };
-  }, [timeline, grid, sheetX, sheetY, thickness, bitParams, stockColors, simulate]);
+  }, [timeline, grid, sheetX, sheetY, thickness, tooling, stockColors, simulate]);
 
   useEffect(() => {
     playingRef.current = playing;
-    fluteRef.current = flute;
     paramsRef.current = params;
-  }, [playing, flute, params]);
+  }, [playing, params]);
 
   // The chips' world follows the job; hiding them clears them.
   const unitsPerMeter = params.units === 'mm' ? 1000 : 1000 / 25.4;
@@ -751,9 +762,8 @@ export default function Viewer3D({
         return x >= 0 && y >= 0 && x <= sheetX && y <= sheetY ? 0 : null;
       },
       lowest: -thickness - SPOILBOARD_IN * unitFactor('in', params.units) * 4,
-      bitDiameter,
     });
-  }, [timeline, unitsPerMeter, sheetX, sheetY, thickness, bitDiameter, params.units]);
+  }, [timeline, unitsPerMeter, sheetX, sheetY, thickness, params.units]);
 
   useEffect(() => {
     const s = sceneRef.current;
@@ -829,6 +839,8 @@ export default function Viewer3D({
     if (!s) return;
     const { position, block, kind } = sample;
     s.bit.position.set(position.x, position.y, position.z);
+    const shape = s.bitShapes[sample.moveIndex >= 0 ? (tooling.ofMove[sample.moveIndex] ?? 0) : 0];
+    if (shape && s.bit.geometry !== shape) s.bit.geometry = shape;
     if (followRef.current) centerOn(s.bit.position);
     const played = Math.max(0, block);
     for (const k of KINDS) s.parts.traversed[k]?.geometry.setDrawRange(0, counts[k][played] * 2);
@@ -846,7 +858,7 @@ export default function Viewer3D({
     simulate();
     s.render();
     // `lines` and `palette` rebuild the traversed lines in (b), which start empty.
-  }, [sample, path, counts, lines, palette, layers, simulate, centerOn]);
+  }, [sample, path, counts, lines, palette, layers, simulate, centerOn, tooling]);
 
   const status = [
     `${moves.length} move${moves.length === 1 ? '' : 's'}`,

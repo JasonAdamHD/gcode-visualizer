@@ -131,16 +131,22 @@ export function touchedTiles(
 
 /**
  * The grid for cutting `strokes` (the job's planner blocks) on `sheet`:
- * spacing `bit.diameter / CELLS_PER_DIAMETER`, coarsened in steps of 25 %
- * until the tiles the job can touch fit `MAX_POINTS` and the sheet fits
- * `MAX_TILE_SLOTS` tiles.
+ * spacing `bit.diameter / CELLS_PER_DIAMETER` (pass the job's smallest
+ * bit), coarsened in steps of 25 % until the tiles the job can touch fit
+ * `MAX_POINTS` and the sheet fits `MAX_TILE_SLOTS` tiles. `reach` is the
+ * largest bit radius in the job, for the tiles it can touch.
  */
-export function stockGrid(sheet: MachineParams['sheet'], bit: Bit, strokes: readonly Stroke[] = []): StockGrid {
+export function stockGrid(
+  sheet: MachineParams['sheet'],
+  bit: Bit,
+  strokes: readonly Stroke[] = [],
+  reach = bit.diameter / 2
+): StockGrid {
   const fine = bit.diameter / CELLS_PER_DIAMETER;
   // Tile slots: (sheet / (TILE·h))² ≤ MAX_TILE_SLOTS.
   let h = Math.max(fine, Math.sqrt((sheet.x * sheet.y) / MAX_TILE_SLOTS) / TILE);
   let grid = gridFor(sheet, h);
-  for (let k = 0; k < 60 && touchedTiles(strokes, bit.diameter / 2, grid) * TILE * TILE > MAX_POINTS; k++) {
+  for (let k = 0; k < 60 && touchedTiles(strokes, reach, grid) * TILE * TILE > MAX_POINTS; k++) {
     h *= 1.25;
     grid = gridFor(sheet, h);
   }
