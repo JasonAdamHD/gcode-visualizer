@@ -2,11 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MachineParams, Units } from '../machine/params';
 import { unitFactor } from '../machine/params';
 import type { ExactCutInput } from '../sim/exactCut';
-import { MAX_EXACT_STROKES, cuttingSegments } from '../sim/exactCut';
+import { MAX_EXACT_STROKES, cuttingSegments, segmentsKey } from '../sim/exactCut';
 import { ARC_TOLERANCE_MM } from '../toolpath/planner';
 import type { Timeline } from '../toolpath/timeline';
 import type { ExactCutReply } from '../workers/exactCut.worker';
@@ -40,28 +40,42 @@ export function useExactCut(
   units: Units,
   enabled: boolean
 ): ExactCut {
-  const input = useMemo<ExactCutInput>(() => {
-    const mm = unitFactor('mm', units);
-    return {
+  const mm = unitFactor('mm', units);
+  const segments = useMemo(() => cuttingSegments(timeline.blocks, ARC_TOLERANCE_MM * mm), [timeline, mm]);
+  // The timeline is rebuilt on any params change (a feed rate, say), but the
+  // job only changes when the geometry does: segments with the same contents
+  // keep the earlier array, adjusted during render so no stale job starts.
+  const key = useMemo(() => segmentsKey(segments), [segments]);
+  const [kept, setKept] = useState({ key, segments });
+  if (kept.key !== key) setKept({ key, segments });
+  const jobSegments = kept.key === key ? kept.segments : segments;
+  const input = useMemo<ExactCutInput>(
+    () => ({
       sheet: { x: sheet.x, y: sheet.y, thickness: sheet.thickness },
       bit: { diameter: bit.diameter, shape: bit.shape },
-      segments: cuttingSegments(timeline.blocks, ARC_TOLERANCE_MM * mm),
+      segments: jobSegments,
       tolerance: BIT_TOLERANCE_MM * mm,
-    };
-  }, [timeline, sheet.x, sheet.y, sheet.thickness, bit.diameter, bit.shape, units]);
+    }),
+    [jobSegments, sheet.x, sheet.y, sheet.thickness, bit.diameter, bit.shape, mm]
+  );
   const moves = input.segments.length / 6;
   const skipped = moves > MAX_EXACT_STROKES;
   const [result, setResult] = useState<Result | null>(null);
+  // The job the last finished mesh belongs to: showing the stock again does not redo it.
+  const readyFor = useRef<ExactCutInput | null>(null);
 
   useEffect(() => {
-    if (!enabled || skipped) return;
+    if (!enabled || skipped || readyFor.current === input) return;
     let worker: Worker | null = null;
     const timer = setTimeout(() => {
       worker = new Worker(new URL('../workers/exactCut.worker.ts', import.meta.url), { type: 'module' });
       worker.onmessage = (e: MessageEvent<ExactCutReply>) => {
         const reply = e.data;
         if (reply.type === 'progress') setResult({ input, status: 'computing', progress: reply.fraction });
-        else if (reply.type === 'done') setResult({ input, status: 'ready', positions: reply.positions, indices: reply.indices });
+        else if (reply.type === 'done') {
+          readyFor.current = input;
+          setResult({ input, status: 'ready', positions: reply.positions, indices: reply.indices });
+        }
         else setResult({ input, status: 'failed', message: reply.message });
       };
       worker.onerror = (e) => setResult({ input, status: 'failed', message: e.message || 'The exact cut worker stopped' });

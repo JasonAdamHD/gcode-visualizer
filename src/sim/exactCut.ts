@@ -78,6 +78,21 @@ export function cuttingSegments(strokes: readonly ExactStroke[], tolerance: numb
   return Float64Array.from(out);
 }
 
+/**
+ * A key for a segment list's contents (length and a 32-bit FNV-1a hash of
+ * its bytes), so a job rebuilt with identical segments can be recognized
+ * without keeping and comparing the old ones.
+ */
+export function segmentsKey(segments: SegmentList): string {
+  const bytes = new Uint8Array(segments.buffer, segments.byteOffset, segments.byteLength);
+  let hash = 0x811c9dc5;
+  for (let k = 0; k < bytes.length; k++) {
+    hash ^= bytes[k];
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${segments.length}:${(hash >>> 0).toString(16)}`;
+}
+
 /** 3D distance from `p` to the segment `a`–`b`. */
 function distanceToSegment(p: Point3, a: Point3, b: Point3): number {
   const v = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };

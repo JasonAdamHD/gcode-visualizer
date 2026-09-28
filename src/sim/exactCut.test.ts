@@ -7,7 +7,7 @@ import type { ManifoldToplevel } from 'manifold-3d';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Point3 } from '../toolpath/moves';
 import type { ExactBit, ExactStroke } from './exactCut';
-import { MAX_EXACT_STROKES, cuttingSegments, exactCut, toolPoints } from './exactCut';
+import { MAX_EXACT_STROKES, cuttingSegments, exactCut, segmentsKey, toolPoints } from './exactCut';
 
 const p = (x: number, y: number, z: number): Point3 => ({ x, y, z });
 const stroke = (a: Point3, b: Point3): ExactStroke => {
@@ -66,6 +66,16 @@ describe('cuttingSegments', () => {
     const pts = Array.from({ length: 9 }, (_, k) => p(10 * Math.cos((k * Math.PI) / 16), 10 * Math.sin((k * Math.PI) / 16), -1));
     const strokes = pts.slice(1).map((b, k) => stroke(pts[k], b));
     expect(cuttingSegments(strokes, 0.001).length / 6).toBe(8);
+  });
+});
+
+describe('segmentsKey', () => {
+  it('is equal for equal contents and differs when a value or the length changes', () => {
+    const a = Float64Array.from([0, 0, -1, 3, 0, -1]);
+    expect(segmentsKey(Float64Array.from(a))).toBe(segmentsKey(a));
+    expect(segmentsKey(Float64Array.from([0, 0, -1, 3, 0, -1.5]))).not.toBe(segmentsKey(a));
+    expect(segmentsKey(a.subarray(0, 3))).not.toBe(segmentsKey(a));
+    expect(segmentsKey(new Float64Array())).toBe('0:811c9dc5');
   });
 });
 
