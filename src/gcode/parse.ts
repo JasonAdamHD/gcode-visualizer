@@ -47,7 +47,7 @@ type Block = {
   units?: Units;
   absolute?: boolean;
   plane?: 17 | 18 | 19;
-  values: Partial<Record<'X' | 'Y' | 'Z' | 'I' | 'J' | 'R' | 'F', number>>;
+  values: Partial<Record<'X' | 'Y' | 'Z' | 'I' | 'J' | 'R' | 'F' | 'S', number>>;
   unsupported: string[];
   /** The line has a G-code (G28, G53, …) that consumes its axis words, so they are not a move. */
   axisWordsUsed: boolean;
@@ -87,7 +87,16 @@ function readBlock(line: TokenizedLine): BlockResult {
         if (AXIS_WORD_CODES.has(Math.trunc(value))) block.axisWordsUsed = true;
       }
       if (conflict) return conflict;
-    } else if (letter === 'X' || letter === 'Y' || letter === 'Z' || letter === 'I' || letter === 'J' || letter === 'R' || letter === 'F') {
+    } else if (
+      letter === 'X' ||
+      letter === 'Y' ||
+      letter === 'Z' ||
+      letter === 'I' ||
+      letter === 'J' ||
+      letter === 'R' ||
+      letter === 'F' ||
+      letter === 'S'
+    ) {
       if (block.values[letter] !== undefined) {
         return { error: { code: 'duplicate-word', message: `${letter} appears twice on one line` } };
       }
@@ -200,7 +209,9 @@ export function sourceLines(text: string): string[] {
  * two halves on the same line, so a full circle is two half arcs. A bad arc
  * becomes a straight feed to its end point, with an error. Zero-length
  * straight moves are dropped. Every move has a `sourceLine`; feeds and
- * plunges carry the modal F as `feedRate` once one is set.
+ * plunges carry the modal F as `feedRate` and the modal S as
+ * `spindleRpm` once each is set. (M3/M4/M5 are still reported as
+ * unsupported: S is taken as the speed whether or not the spindle is on.)
  */
 export function parseGcode(text: string, start: StartPosition): GcodeProgram {
   const lines = sourceLines(text).map(tokenize);
@@ -222,6 +233,7 @@ export function parseGcode(text: string, start: StartPosition): GcodeProgram {
   let lineUnits: Units = 'mm';
   let plane: 17 | 18 | 19 = 17;
   let feedRate: number | undefined;
+  let spindleRpm: number | undefined;
   let unitsSet = false;
   let moved = false;
   let missingFeedReported = false;
@@ -230,7 +242,10 @@ export function parseGcode(text: string, start: StartPosition): GcodeProgram {
     if (!bulge && samePoint(pos, to)) return;
     const move: Move = { kind, from: pos, to, sourceLine: line };
     if (bulge) move.bulge = bulge;
-    if (feedRate !== undefined && (kind === 'feed' || kind === 'plunge')) move.feedRate = feedRate;
+    if (kind === 'feed' || kind === 'plunge') {
+      if (feedRate !== undefined) move.feedRate = feedRate;
+      if (spindleRpm !== undefined) move.spindleRpm = spindleRpm;
+    }
     moves.push(move);
     pos = to;
   };
@@ -262,6 +277,10 @@ export function parseGcode(text: string, start: StartPosition): GcodeProgram {
     if (values.F !== undefined) {
       if (values.F > 0) feedRate = values.F * k;
       else report(line, 'error', 'invalid-feed', `Feed rate F${values.F} must be positive; ignored`);
+    }
+    if (values.S !== undefined) {
+      if (values.S >= 0) spindleRpm = values.S;
+      else report(line, 'error', 'invalid-spindle', `Spindle speed S${values.S} must not be negative; ignored`);
     }
     for (const word of block.unsupported) {
       const detail = block.axisWordsUsed ? '; the axis words on this line are ignored too' : '';

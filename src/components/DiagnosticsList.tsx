@@ -18,6 +18,7 @@ const LABELS: Record<DiagnosticCode, string> = {
   'unused-word': 'Unused I/J/R',
   'missing-feed': 'Cut before any F',
   'invalid-feed': 'Invalid feed rate',
+  'invalid-spindle': 'Invalid spindle speed',
   'arc-missing-center': 'Arc without I/J/R',
   'arc-zero-radius': 'Arc with zero radius',
   'arc-radius-mismatch': 'Arc radius mismatch',

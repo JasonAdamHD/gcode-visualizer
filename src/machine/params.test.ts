@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { MachineParams } from './params';
 import {
   DEFAULT_PARAMS,
+  MAX_FLUTES,
   MM_PER_INCH,
   convertParams,
   displayDecimals,
@@ -18,11 +19,11 @@ import {
 
 const vbit: MachineParams = {
   ...DEFAULT_PARAMS,
-  bit: { diameter: 0.5, shape: { kind: 'vbit', includedAngleDeg: 60 }, flute: { kind: 'down' } },
+  bit: { diameter: 0.5, shape: { kind: 'vbit', includedAngleDeg: 60 }, flute: { kind: 'down' }, fluteCount: 1 },
 };
 const compression: MachineParams = {
   ...DEFAULT_PARAMS,
-  bit: { diameter: 0.25, shape: { kind: 'flat' }, flute: { kind: 'compression', upcutLength: 0.125 } },
+  bit: { diameter: 0.25, shape: { kind: 'flat' }, flute: { kind: 'compression', upcutLength: 0.125 }, fluteCount: 2 },
 };
 
 /** Serialized DEFAULT_PARAMS with `mutate` applied to a deep copy. */
@@ -63,6 +64,8 @@ describe('convertParams', () => {
     expect(mm.junctionDeviation).toBeCloseTo(0.0508);
     expect(mm.bit.shape).toEqual({ kind: 'vbit', includedAngleDeg: 60 });
     expect(mm.bit.flute).toEqual({ kind: 'down' });
+    expect(mm.bit.fluteCount).toBe(1);
+    expect(mm.spindleRpm).toBe(18000);
   });
 
   it("scales a compression bit's up-cut length", () => {
@@ -143,6 +146,18 @@ describe('validateParams', () => {
     }
   });
 
+  it('requires a whole flute count from 1 to MAX_FLUTES and a positive spindle speed', () => {
+    for (const fluteCount of [0, 1.5, -1, MAX_FLUTES + 1, NaN]) {
+      expect(validateParams({ ...DEFAULT_PARAMS, bit: { ...DEFAULT_PARAMS.bit, fluteCount } })).toHaveProperty(['bit.fluteCount']);
+    }
+    for (const fluteCount of [1, MAX_FLUTES]) {
+      expect(validateParams({ ...DEFAULT_PARAMS, bit: { ...DEFAULT_PARAMS.bit, fluteCount } })).toEqual({});
+    }
+    for (const spindleRpm of [0, -100, NaN]) {
+      expect(validateParams({ ...DEFAULT_PARAMS, spindleRpm })).toHaveProperty(['spindleRpm']);
+    }
+  });
+
   it('requires a V-bit angle strictly between 0 and 180', () => {
     for (const angle of [0, 180, -10, 200]) {
       const p: MachineParams = { ...vbit, bit: { ...vbit.bit, shape: { kind: 'vbit', includedAngleDeg: angle } } };
@@ -201,6 +216,9 @@ describe('serializeParams / parseParams', () => {
     ['null', 'null'],
     ['wrong version', withRaw((r) => (r.version = 3))],
     ['missing the flute', withRaw((r) => delete r.bit.flute)],
+    ['missing the flute count', withRaw((r) => delete r.bit.fluteCount)],
+    ['missing the spindle speed', withRaw((r) => delete r.spindleRpm)],
+    ['a fractional flute count', withRaw((r) => (r.bit.fluteCount = 2.5))],
     ['unknown flute', withRaw((r) => (r.bit.flute = { kind: 'sideways' }))],
     ['compression without up-cut length', withRaw((r) => (r.bit.flute = { kind: 'compression' }))],
     ['non-positive up-cut length', withRaw((r) => (r.bit.flute = { kind: 'compression', upcutLength: 0 }))],
