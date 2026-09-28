@@ -362,6 +362,8 @@ export default function Viewer3D({
     return () => {
       sceneRef.current = null;
       chips.dispose();
+      // Every tool's bit shape, not only the one on the mesh that clearGroup below reaches.
+      for (const g of state.bitShapes) g.dispose();
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
