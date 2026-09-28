@@ -20,9 +20,8 @@ import { kindLayer } from '../sim/layers';
 import { bitProfile, kindCounts, moveLineBuffers, pathBuffer } from '../sim/sceneData';
 import type { MoveKind } from '../sim/sceneData';
 import type { DirtyRect, Stock } from '../sim/stock';
-import { createStock, stockGrid } from '../sim/stock';
+import { stockFromGrid, stockGrid } from '../sim/stock';
 import type { Rgb } from '../sim/stockMesh';
-import { gridIndex, skirtIndex, skirtVertexCount, surfacePositions, writeSkirt, writeSurfaceRows } from '../sim/stockMesh';
 import type { CutTarget } from '../sim/stockSim';
 import { StockSimulator } from '../sim/stockSim';
 import { useLayers } from '../state/useLayers';
@@ -31,6 +30,7 @@ import { formatDuration } from '../toolpath/estimate';
 import type { Move } from '../toolpath/moves';
 import type { Timeline, TimelineSample } from '../toolpath/timeline';
 import { ignoreShortcut } from './keyboard';
+import { StockView } from './stockView';
 import './Workspace.css';
 import './Viewer3D.css';
 
@@ -212,15 +212,11 @@ type SceneState = {
   render: () => void;
 };
 
-/** The simulated stock and the buffers that draw it. */
+/** The simulated stock and what draws it. */
 type StockState = {
   stock: Stock;
   sim: StockSimulator;
-  surface: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>;
-  skirt: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>;
-  positions: THREE.BufferAttribute;
-  colors: THREE.BufferAttribute;
-  skirtPositions: THREE.BufferAttribute;
+  view: StockView;
 };
 
 const emptyParts = (): JobParts => ({ sheet: null, spoilboard: null, axes: null, lines: {}, traversed: {} });
@@ -588,29 +584,8 @@ export default function Viewer3D({
     return p ? { top: toRgb(p.stock), cut: toRgb(p.stockCut) } : { top: toRgb('#e2cfae'), cut: toRgb('#b89468') };
   }, []);
 
-  /** Uploads the rows of `rect` (and the skirt, if the cut reached an edge). */
-  const flushStock = useCallback(
-    (st: StockState, rect: DirtyRect | null) => {
-      if (!rect) return;
-      const { stock } = st;
-      const { start, count } = writeSurfaceRows(
-        stock,
-        st.positions.array as Float32Array,
-        { data: st.colors.array as Uint8Array, ...stockColors() },
-        rect.j0,
-        rect.j1
-      );
-      for (const attr of [st.positions, st.colors]) {
-        attr.addUpdateRange(start, count);
-        attr.needsUpdate = true;
-      }
-      if (rect.i0 === 0 || rect.j0 === 0 || rect.i1 === stock.nx - 1 || rect.j1 === stock.ny - 1) {
-        writeSkirt(stock, st.skirtPositions.array as Float32Array);
-        st.skirtPositions.needsUpdate = true;
-      }
-    },
-    [stockColors]
-  );
+  /** Uploads the tiles `rect` touched (everything after a checkpoint restore). */
+  const flushStock = useCallback((st: StockState, rect: DirtyRect | null) => st.view.update(rect), []);
 
   const simulateSlice = useCallback(
     function slice() {
@@ -641,49 +616,21 @@ export default function Viewer3D({
     if (!simFrameRef.current) simulateSlice();
   }, [simulateSlice]);
 
+  // Fine enough for the bit, coarsened only if this job's cuts would not fit the budget.
   const grid = useMemo(
-    () => stockGrid({ x: sheetX, y: sheetY, thickness }, bitParams),
-    [sheetX, sheetY, thickness, bitParams]
+    () => stockGrid({ x: sheetX, y: sheetY, thickness }, bitParams, timeline.blocks),
+    [sheetX, sheetY, thickness, bitParams, timeline]
   );
 
   // (d) A fresh stock whenever the job, sheet or bit change.
   useEffect(() => {
     const s = sceneRef.current;
     if (!s) return;
-    const stock = createStock({ x: sheetX, y: sheetY, thickness }, bitParams);
+    const stock = stockFromGrid({ x: sheetX, y: sheetY, thickness }, grid);
     const sim = new StockSimulator(timeline, stock, bitParams);
-
-    const positions = new THREE.BufferAttribute(surfacePositions(stock), 3);
-    const colors = new THREE.BufferAttribute(new Uint8Array(stock.nx * stock.ny * 3), 3, true);
-    writeSurfaceRows(stock, positions.array as Float32Array, { data: colors.array as Uint8Array, ...stockColors() }, 0, stock.ny - 1);
-    positions.setUsage(THREE.DynamicDrawUsage);
-    colors.setUsage(THREE.DynamicDrawUsage);
-    const surfaceGeometry = new THREE.BufferGeometry();
-    surfaceGeometry.setAttribute('position', positions);
-    surfaceGeometry.setAttribute('color', colors);
-    surfaceGeometry.setIndex(new THREE.BufferAttribute(gridIndex(stock.nx, stock.ny), 1));
-    // Pushed back a little so toolpath lines lying on a cut floor stay visible.
-    const material = () =>
-      new THREE.MeshLambertMaterial({ flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
-    const surfaceMaterial = material();
-    surfaceMaterial.vertexColors = true;
-    const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
-    // Heights only go down inside the sheet's box; skip bounds over a million vertices.
-    surface.frustumCulled = false;
-
-    const skirtPositions = new THREE.BufferAttribute(new Float32Array(skirtVertexCount(stock) * 3), 3);
-    writeSkirt(stock, skirtPositions.array as Float32Array);
-    skirtPositions.setUsage(THREE.DynamicDrawUsage);
-    const skirtGeometry = new THREE.BufferGeometry();
-    skirtGeometry.setAttribute('position', skirtPositions);
-    skirtGeometry.setIndex(new THREE.BufferAttribute(skirtIndex(stock), 1));
-    const skirtMaterial = material();
-    skirtMaterial.color.set(paletteRef.current?.stock ?? '#e2cfae');
-    const skirt = new THREE.Mesh(skirtGeometry, skirtMaterial);
-    skirt.frustumCulled = false;
-
-    s.stockGroup.add(surface, skirt);
-    stockRef.current = { stock, sim, surface, skirt, positions, colors, skirtPositions };
+    const view = new StockView(stock, stockColors(), paletteRef.current?.stock ?? '#e2cfae');
+    s.stockGroup.add(view.group);
+    stockRef.current = { stock, sim, view };
     simulate();
     return () => {
       cancelAnimationFrame(simFrameRef.current);
@@ -695,7 +642,7 @@ export default function Viewer3D({
       // On unmount (a) has already disposed the renderer; only redraw a live scene.
       if (sceneRef.current === s) s.render();
     };
-  }, [timeline, sheetX, sheetY, thickness, bitParams, stockColors, simulate]);
+  }, [timeline, grid, sheetX, sheetY, thickness, bitParams, stockColors, simulate]);
 
   // Recolor the stock for a new color scheme.
   useEffect(() => {
@@ -703,11 +650,7 @@ export default function Viewer3D({
     const st = stockRef.current;
     const s = sceneRef.current;
     if (!st || !s || !palette) return;
-    writeSurfaceRows(st.stock, st.positions.array as Float32Array, { data: st.colors.array as Uint8Array, ...stockColors() }, 0, st.stock.ny - 1);
-    // Ranges queued by a simulation slice would limit the upload to their rows.
-    st.colors.clearUpdateRanges();
-    st.colors.needsUpdate = true;
-    st.skirt.material.color.set(palette.stock);
+    st.view.recolor(stockColors(), palette.stock);
     s.render();
   }, [palette, stockColors]);
 

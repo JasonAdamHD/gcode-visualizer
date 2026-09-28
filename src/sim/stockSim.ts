@@ -9,13 +9,16 @@
 import type { Point3 } from '../toolpath/moves';
 import type { Timeline } from '../toolpath/timeline';
 import type { Bit, DirtyRect, Stock } from './stock';
-import { cutSegment, unionRect } from './stock';
+import { cutSegment, restoreTiles, snapshotTiles, unionRect } from './stock';
 
-/** Most saved copies of the heights kept at once; each costs `nx·ny·4` bytes. */
+/**
+ * Most checkpoints kept at once. A checkpoint shares the stock's tiles
+ * (copy on write), so it costs a tile table plus the tiles cut after it.
+ */
 export const MAX_CHECKPOINTS = 16;
 
-/** Default work between checkpoints, as a multiple of the grid size, so copying stays a small share of the work. */
-const CHECKPOINT_WORK_PER_CELL = 8;
+/** Default work (grid points visited) between checkpoints. */
+const CHECKPOINT_WORK = 1 << 22;
 
 /** Where playback is: a timeline block and the tool tip, as in `TimelineSample`. */
 export type CutTarget = { block: number; position: Point3 };
@@ -35,7 +38,7 @@ export type StockSimulatorOptions = {
   maxCheckpoints?: number;
 };
 
-type Checkpoint = { block: number; heights: Float32Array };
+type Checkpoint = { block: number; tiles: (Float32Array | null)[] };
 
 /**
  * Cuts `stock` along `timeline` up to wherever playback is. The cut state
@@ -59,7 +62,7 @@ export class StockSimulator {
     this.timeline = timeline;
     this.stock = stock;
     this.bit = bit;
-    this.checkpointWork = options.checkpointWork ?? CHECKPOINT_WORK_PER_CELL * stock.heights.length;
+    this.checkpointWork = options.checkpointWork ?? CHECKPOINT_WORK;
     this.maxCheckpoints = Math.max(1, options.maxCheckpoints ?? MAX_CHECKPOINTS);
   }
 
@@ -128,8 +131,7 @@ export class StockSimulator {
 
   /** Back to a checkpoint, or to uncut stock with none. */
   private restore(cp: Checkpoint | null) {
-    if (cp) this.stock.heights.set(cp.heights);
-    else this.stock.heights.fill(0);
+    restoreTiles(this.stock, cp ? cp.tiles : null);
     this.block = cp ? cp.block : 0;
     this.distance = 0;
     this.workSinceCheckpoint = 0;
@@ -139,7 +141,7 @@ export class StockSimulator {
     if (this.workSinceCheckpoint < this.checkpointWork) return;
     const last = this.checkpoints[this.checkpoints.length - 1];
     if (last && last.block >= this.block) return;
-    this.checkpoints.push({ block: this.block, heights: this.stock.heights.slice() });
+    this.checkpoints.push({ block: this.block, tiles: snapshotTiles(this.stock) });
     this.workSinceCheckpoint = 0;
     if (this.checkpoints.length > this.maxCheckpoints) {
       this.checkpoints = this.checkpoints.filter((_, k) => k % 2 === 1);

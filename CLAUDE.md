@@ -82,8 +82,12 @@ npm run check        # lint + build + test: run before every commit
   - `sceneData.ts`: per-kind line buffers, a playback-ordered path buffer
     (piece `i` = timeline block `i`), `kindCounts` for drawing the played
     path per kind, and lathe outlines for the bit shapes.
-  - `stock.ts`: material removal as a **heightfield** over the sheet
-    (`nx × ny` points, capped at `MAX_CELLS`). Cutting only ever takes
+  - `stock.ts`: material removal as a **heightfield** over the sheet, at
+    1/32 of the bit diameter, stored in `TILE × TILE` tiles allocated only
+    where the bit cuts (uncut tiles are the flat top). `stockGrid` sizes
+    the grid from the job's own strokes, coarsening only past `MAX_POINTS`.
+    Tiles are copy-on-write (`shared`), so checkpoints share unchanged
+    tiles; always write through `cutSegment`. Cutting only ever takes
     `min(height, tool surface)`, clamped at −thickness, so cutting a move in
     pieces equals cutting it whole; keep it that way. `cutSegment` is exact
     per grid point (the tool surface along a move is convex in the move
@@ -91,9 +95,12 @@ npm run check        # lint + build + test: run before every commit
     bit only.
   - `stockSim.ts`: `StockSimulator` cuts towards the playback position
     within a work budget (so the view can spread it over frames) and seeks
-    backwards by restoring the nearest **checkpoint**; any seek sequence
+    backwards by restoring the nearest **checkpoint** (a tile-table
+    snapshot); any seek sequence
     must equal a from-scratch cut (tested).
-  - `stockMesh.ts`: surface and skirt buffers; a cut rewrites only its rows.
+  - `stockMesh.ts`: per-tile mesh vertices (with the next tiles' first
+    row and column, so tiles meet), the flat top over uncut tiles, and the
+    skirt.
   - `camera.ts`: view presets, `framePose` (fits a box from a direction),
     `jobBounds`, ortho sizing. Camera up is always +Z; the top view leans a
     hair towards −Y so OrbitControls keeps an azimuth.
@@ -132,8 +139,9 @@ npm run check        # lint + build + test: run before every commit
   machine coordinates directly; only the camera differs from Three.js
   defaults (`camera.up = (0, 0, 1)`, **Z up**). Never swap axes in scene
   data. It gets the timeline and sample as props. The stock is cut in
-  time-boxed slices per animation frame and only dirty rows are uploaded;
-  never rebuild the stock geometry during playback. Layers only toggle
+  time-boxed slices per animation frame; `stockView.ts` packs cut tiles
+  into a few buffers and uploads only the tiles a cut touched. Never rebuild
+  the stock geometry during playback (only a checkpoint restore redraws it). Layers only toggle
   `visible`. A second (orthographic) camera is swapped in for Ortho.
   `PlaybackBar.tsx` holds the playback controls, the scrubber strip and
   the readout.

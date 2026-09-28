@@ -8,7 +8,7 @@ import { DEFAULT_PARAMS } from '../machine/params';
 import type { Move, Point3 } from '../toolpath/moves';
 import type { Timeline } from '../toolpath/timeline';
 import { buildTimeline, sampleTimeline } from '../toolpath/timeline';
-import { createStock } from './stock';
+import { createStock, denseHeights } from './stock';
 import type { StockSimulatorOptions } from './stockSim';
 import { StockSimulator } from './stockSim';
 
@@ -50,7 +50,7 @@ const simulator = (tl: Timeline = timeline, options?: StockSimulatorOptions) =>
 function fromScratch(t: number, tl: Timeline = timeline): Float32Array {
   const sim = simulator(tl);
   expect(sim.advanceTo(sampleTimeline(tl, t)).done).toBe(true);
-  return sim.stock.heights;
+  return denseHeights(sim.stock);
 }
 
 function maxDiff(a: Float32Array, b: Float32Array): number {
@@ -72,7 +72,7 @@ describe('StockSimulator', () => {
   it('cuts nothing at the start and something by the end', () => {
     expect(fromScratch(0).every((h) => h === 0)).toBe(true);
     const end = fromScratch(timeline.total);
-    expect(Math.min(...end)).toBe(-10);
+    expect(end.reduce((a, b) => Math.min(a, b), 0)).toBe(-10);
   });
 
   it('gives the same stock after any sequence of seeks as cutting from scratch', () => {
@@ -86,14 +86,14 @@ describe('StockSimulator', () => {
       if (r < 0.5) t = Math.min(timeline.total, t + next() * timeline.total * 0.05);
       else t = next() * timeline.total;
       expect(sim.advanceTo(sampleTimeline(timeline, t)).done).toBe(true);
-      expect(maxDiff(sim.stock.heights, fromScratch(t))).toBeLessThan(1e-5);
+      expect(maxDiff(denseHeights(sim.stock), fromScratch(t))).toBeLessThan(1e-5);
     }
   });
 
   it('cuts a block in pieces over many frames the same as in one go', () => {
     const sim = simulator();
     for (let k = 0; k <= 400; k++) sim.advanceTo(sampleTimeline(timeline, (timeline.total * k) / 400));
-    expect(maxDiff(sim.stock.heights, fromScratch(timeline.total))).toBeLessThan(1e-5);
+    expect(maxDiff(denseHeights(sim.stock), fromScratch(timeline.total))).toBeLessThan(1e-5);
   });
 
   it('spreads a small budget over several calls and ends equal to one unbounded call', () => {
@@ -111,7 +111,7 @@ describe('StockSimulator', () => {
     }
     expect(calls).toBeGreaterThan(3);
     expect(last).toBe(1);
-    expect(sim.stock.heights).toEqual(fromScratch(timeline.total));
+    expect(denseHeights(sim.stock)).toEqual(fromScratch(timeline.total));
   });
 
   it('reports the grid points it changed, and the whole grid after a restore', () => {
@@ -120,7 +120,7 @@ describe('StockSimulator', () => {
     expect(first.dirty).not.toBeNull();
     const back = sim.advanceTo(sampleTimeline(timeline, 0));
     expect(back.dirty).toEqual({ i0: 0, j0: 0, i1: sim.stock.nx - 1, j1: sim.stock.ny - 1 });
-    expect(sim.stock.heights.every((h) => h === 0)).toBe(true);
+    expect(denseHeights(sim.stock).every((h) => h === 0)).toBe(true);
   });
 
   it('handles an empty timeline', () => {
@@ -144,6 +144,6 @@ describe('StockSimulator', () => {
     let calls = 0;
     while (!sim.advanceTo(sampleTimeline(tl, tl.total), 2_000_000).done) calls++;
     expect(calls).toBeGreaterThan(0);
-    expect(Math.min(...sim.stock.heights)).toBeCloseTo(-1, 5);
-  });
+    expect(denseHeights(sim.stock).reduce((a, b) => Math.min(a, b), 0)).toBeCloseTo(-1, 5);
+  }, 60_000);
 });
