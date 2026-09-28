@@ -169,6 +169,18 @@ describe('tiles', () => {
     expect(takeDirtyTiles(stock).sort((a, b) => a - b)).toEqual([t, t + 1]);
   });
 
+  it('counts the material removed, once', () => {
+    const stock = createStock(sheet, flat);
+    cutSegment(stock, p(20, 30, -3), p(80, 30, -3), flat);
+    const volume = stock.removed * stock.dx * stock.dy;
+    const slot = 60 * 6 * 3 + Math.PI * 9 * 3;
+    // Each grid point stands for a whole cell, so cells along the slot edge count in full.
+    expect(Math.abs(volume - slot) / slot).toBeLessThan(0.05);
+    // Cutting the same slot again removes nothing more.
+    cutSegment(stock, p(20, 30, -3), p(80, 30, -3), flat);
+    expect(stock.removed * stock.dx * stock.dy).toBe(volume);
+  });
+
   it('shares tiles with a snapshot and copies them before writing', () => {
     const stock = createStock(sheet, flat);
     cutSegment(stock, p(20, 30, -3), p(40, 30, -3), flat);
