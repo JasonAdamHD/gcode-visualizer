@@ -31,6 +31,7 @@ import type { Move } from '../toolpath/moves';
 import type { Timeline, TimelineSample } from '../toolpath/timeline';
 import { ignoreShortcut } from './keyboard';
 import { StockView } from './stockView';
+import { useExactCut } from './useExactCut';
 import './Workspace.css';
 import './Viewer3D.css';
 
@@ -49,6 +50,8 @@ type Viewer3DProps = {
   playbackBar: ReactNode;
   /** True when ← and → step through moves (a program is open), for the hint. */
   stepping: boolean;
+  /** True when playback is at the end of the job, where the exact finished part is shown. */
+  atEnd: boolean;
 };
 
 /** Theme colors read from CSS custom properties on the workspace element. */
@@ -204,6 +207,8 @@ type SceneState = {
   parts: JobParts;
   /** Holds the stock surface and skirt. */
   stockGroup: THREE.Group;
+  /** Holds the exact finished part, shown instead of the stock at the end. */
+  exactGroup: THREE.Group;
   bit: THREE.Mesh;
   /** The played part of the current block, from its start to the bit. */
   current: Line;
@@ -231,6 +236,7 @@ export default function Viewer3D({
   currentMove,
   playbackBar,
   stepping,
+  atEnd,
 }: Viewer3DProps) {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -238,6 +244,10 @@ export default function Viewer3D({
   const [webglError] = useState(() => !webglAvailable());
   const palette = usePalette(workspaceRef);
   const [layers, toggleLayer] = useLayers();
+  // The exact finished part, computed in the background while the stock is shown.
+  const exact = useExactCut(timeline, params.sheet, params.bit, params.units, layers.stock);
+  // At the end of the job the exact part replaces the simulated stock.
+  const exactShown = layers.stock && atEnd && exact.status === 'ready';
 
   // (a) Renderer, camera, controls and lights, for the component's lifetime.
   useEffect(() => {
@@ -264,6 +274,8 @@ export default function Viewer3D({
 
     const job = new THREE.Group();
     const stockGroup = new THREE.Group();
+    const exactGroup = new THREE.Group();
+    exactGroup.visible = false;
     const bit = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial());
     bit.rotation.x = Math.PI / 2; // Lathe axis is +Y; turn it to +Z.
     // Drawn after the job lines so the highlight wins where they coincide.
@@ -278,7 +290,7 @@ export default function Viewer3D({
     const moveOverlay = overlay();
     moveOverlay.renderOrder = 2;
     moveOverlay.visible = false;
-    scene.add(job, stockGroup, bit, current, moveOverlay);
+    scene.add(job, stockGroup, exactGroup, bit, current, moveOverlay);
 
     let frame = 0;
     const render = () => {
@@ -315,6 +327,7 @@ export default function Viewer3D({
       job,
       parts: emptyParts(),
       stockGroup,
+      exactGroup,
       bit,
       current,
       moveOverlay,
@@ -462,9 +475,10 @@ export default function Viewer3D({
       if (whole) whole.visible = on && layers.untraversed;
       if (played) played.visible = on;
     }
-    s.stockGroup.visible = layers.stock;
+    s.stockGroup.visible = layers.stock && !exactShown;
+    s.exactGroup.visible = exactShown;
     s.render();
-  }, [layers, lines, palette]);
+  }, [layers, lines, palette, exactShown]);
 
   const path = useMemo(() => pathBuffer(moves, params), [moves, params]);
 
@@ -578,6 +592,7 @@ export default function Viewer3D({
   const paletteRef = useRef(palette);
   const layersRef = useRef(layers);
   const [simProgress, setSimProgress] = useState<number | null>(null);
+  const exactShownRef = useRef(exactShown);
 
   const stockColors = useCallback(() => {
     const p = paletteRef.current;
@@ -593,7 +608,11 @@ export default function Viewer3D({
       const st = stockRef.current;
       const s = sceneRef.current;
       const target = targetRef.current;
-      if (!st || !s || !target || !layersRef.current.stock) return;
+      // Nothing to simulate while the exact part stands in for the stock.
+      if (!st || !s || !target || !layersRef.current.stock || exactShownRef.current) {
+        setSimProgress(null);
+        return;
+      }
       const start = performance.now();
       let result;
       do {
@@ -654,16 +673,49 @@ export default function Viewer3D({
     s.render();
   }, [palette, stockColors]);
 
-  // Showing the stock again catches it up; hiding it stops the work.
+  // Showing the stock again catches it up; hiding it (or the exact part
+  // standing in for it) stops the work.
   useEffect(() => {
     layersRef.current = layers;
-    if (layers.stock) {
+    exactShownRef.current = exactShown;
+    if (layers.stock && !exactShown) {
       simulate();
     } else {
       cancelAnimationFrame(simFrameRef.current);
       simFrameRef.current = 0;
     }
-  }, [layers, simulate]);
+  }, [layers, exactShown, simulate]);
+
+  const exactPositions = exact.status === 'ready' ? exact.positions : null;
+  const exactIndices = exact.status === 'ready' ? exact.indices : null;
+
+  // The exact part's mesh: the sheet's own faces in the stock color, cut
+  // faces in the cut color, one flat-shaded triangle each.
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    clearGroup(s.exactGroup);
+    if (!exactPositions || !exactIndices || !palette) {
+      s.render();
+      return;
+    }
+    const geometry = exactPartGeometry(exactPositions, exactIndices, { x: sheetX, y: sheetY, thickness }, [
+      new THREE.Color(palette.stock),
+      new THREE.Color(palette.stockCut),
+    ]);
+    const mesh = new THREE.Mesh(
+      geometry,
+      new THREE.MeshLambertMaterial({
+        vertexColors: true,
+        flatShading: true,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      })
+    );
+    s.exactGroup.add(mesh);
+    s.render();
+  }, [exactPositions, exactIndices, palette, sheetX, sheetY, thickness]);
 
   // (c) Bit position, the played part of the path and the stock's target.
   // Only moves things and sets draw ranges, so it is cheap enough to run
@@ -695,7 +747,8 @@ export default function Viewer3D({
   const status = [
     `${moves.length} move${moves.length === 1 ? '' : 's'}`,
     estimate.total > 0 ? `est. ${formatDuration(estimate.total)}` : null,
-    simProgress !== null && layers.stock ? `Simulating… ${simProgress} %` : null,
+    simProgress !== null && layers.stock && !exactShown ? `Simulating… ${simProgress} %` : null,
+    layers.stock ? exactStatus(exact) : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -779,6 +832,66 @@ export default function Viewer3D({
       </p>
     </div>
   );
+}
+
+/** The exact cut's progress for the toolbar, or null once it is ready. */
+function exactStatus(exact: ReturnType<typeof useExactCut>): string | null {
+  switch (exact.status) {
+    case 'computing':
+      return exact.progress < 1 ? `Exact cut… ${Math.floor(exact.progress * 100)} %` : 'Exact cut… finishing';
+    case 'skipped':
+      return `exact cut skipped (${exact.moves.toLocaleString()} moves)`;
+    case 'failed':
+      return 'exact cut failed';
+    default:
+      return null;
+  }
+}
+
+/**
+ * A non-indexed geometry for the exact part with a color per triangle:
+ * `colors[0]` on the sheet's original faces (top, bottom and sides, which
+ * are left where nothing cut them) and `colors[1]` on faces the bit made.
+ */
+function exactPartGeometry(
+  positions: Float32Array,
+  indices: Uint32Array,
+  sheet: { x: number; y: number; thickness: number },
+  colors: [THREE.Color, THREE.Color]
+): THREE.BufferGeometry {
+  const eps = 1e-5 * Math.max(sheet.x, sheet.y);
+  const onPlane = (a: number, b: number, c: number, value: number) =>
+    Math.abs(a - value) < eps && Math.abs(b - value) < eps && Math.abs(c - value) < eps;
+  const out = new Float32Array(indices.length * 3);
+  const rgb = new Float32Array(indices.length * 3);
+  for (let t = 0; t < indices.length; t += 3) {
+    const [a, b, c] = [indices[t] * 3, indices[t + 1] * 3, indices[t + 2] * 3];
+    const xs = [positions[a], positions[b], positions[c]] as const;
+    const ys = [positions[a + 1], positions[b + 1], positions[c + 1]] as const;
+    const zs = [positions[a + 2], positions[b + 2], positions[c + 2]] as const;
+    const original =
+      onPlane(...zs, 0) ||
+      onPlane(...zs, -sheet.thickness) ||
+      onPlane(...xs, 0) ||
+      onPlane(...xs, sheet.x) ||
+      onPlane(...ys, 0) ||
+      onPlane(...ys, sheet.y);
+    const color = original ? colors[0] : colors[1];
+    for (let k = 0; k < 3; k++) {
+      const v = indices[t + k] * 3;
+      const o = (t + k) * 3;
+      out[o] = positions[v];
+      out[o + 1] = positions[v + 1];
+      out[o + 2] = positions[v + 2];
+      rgb[o] = color.r;
+      rgb[o + 1] = color.g;
+      rgb[o + 2] = color.b;
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(out, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(rgb, 3));
+  return geometry;
 }
 
 /** A grid spacing with three significant digits. */

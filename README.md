@@ -127,6 +127,7 @@ and saved files will be deleted automatically after 30 days.
 - SVG for the 2D drawing canvas (real DOM elements for hit-testing and
   snapping, rather than raw `<canvas>`)
 - Three.js for 3D toolpath simulation (Phase 4)
+- manifold-3d (WebAssembly, in a Web Worker) for the exact finished part
 - Vite
 - Vitest for unit tests
 
