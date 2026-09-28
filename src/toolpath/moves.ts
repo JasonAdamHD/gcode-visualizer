@@ -30,6 +30,8 @@ export type Move = {
   feedRate?: number;
   /** Programmed spindle speed in RPM (an imported S word; 0 = stopped); overrides the params' spindle speed. */
   spindleRpm?: number;
+  /** Tool number in the spindle (an imported T/M6 tool change); unset before the first one. */
+  tool?: number;
 };
 
 /** Height above the current material surface where a rapid lower stops and the plunge starts, in inches. */

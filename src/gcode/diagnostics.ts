@@ -14,6 +14,8 @@ export type DiagnosticCode =
   | 'missing-feed'
   | 'invalid-feed'
   | 'invalid-spindle'
+  | 'invalid-tool'
+  | 'unknown-tool'
   | 'arc-missing-center'
   | 'arc-zero-radius'
   | 'arc-radius-mismatch'
