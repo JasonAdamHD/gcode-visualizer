@@ -88,6 +88,15 @@ export function validateLibrary(library: ToolLibrary): string[] {
   return errors;
 }
 
+/**
+ * The picked tool's id from a stored choice: the id when it names a tool in
+ * `library`, otherwise none. There is deliberately no fallback to some
+ * tool, since the params may hold a different bit; picking applies a tool.
+ */
+export function resolveActiveTool(stored: string | null, library: ToolLibrary): string | null {
+  return stored && library.tools.some((t) => t.id === stored) ? stored : null;
+}
+
 /** The lowest tool number not in use. */
 export function nextToolNumber(library: ToolLibrary): number {
   const used = new Set(library.tools.map((t) => t.number));

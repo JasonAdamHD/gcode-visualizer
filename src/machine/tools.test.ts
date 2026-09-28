@@ -8,6 +8,7 @@ import type { Tool, ToolLibrary } from './tools';
 import {
   applyTool,
   nextToolNumber,
+  resolveActiveTool,
   paramsMatchTool,
   parseLibrary,
   serializeLibrary,
@@ -92,6 +93,15 @@ describe('validation', () => {
     expect(validateLibrary(library)).toEqual([]);
     expect(validateLibrary({ version: 1, tools: [quarter, { ...vbit, number: 1 }] })).toEqual(['Tool number 1 is used twice']);
     expect(validateLibrary({ version: 1, tools: [quarter, { ...vbit, id: 'a' }] })).toEqual(['Tool id a is used twice']);
+  });
+});
+
+describe('resolveActiveTool', () => {
+  it('keeps a stored id that is in the library and picks nothing otherwise', () => {
+    expect(resolveActiveTool('b', library)).toBe('b');
+    expect(resolveActiveTool(null, library)).toBeNull();
+    expect(resolveActiveTool('', library)).toBeNull();
+    expect(resolveActiveTool('gone', library)).toBeNull();
   });
 });
 

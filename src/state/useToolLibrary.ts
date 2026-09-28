@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { MachineParams } from '../machine/params';
 import { DEFAULT_PARAMS } from '../machine/params';
 import type { Tool, ToolLibrary } from '../machine/tools';
-import { newToolId, nextToolNumber, parseLibrary, serializeLibrary, toolFromParams } from '../machine/tools';
+import { newToolId, nextToolNumber, parseLibrary, resolveActiveTool, serializeLibrary, toolFromParams } from '../machine/tools';
 
 export const TOOLS_STORAGE_KEY = 'cnc-visualizer.tools';
 const ACTIVE_STORAGE_KEY = 'cnc-visualizer.activeTool';
@@ -21,12 +21,10 @@ function load(): { library: ToolLibrary; activeId: string | null } {
     const text = localStorage.getItem(TOOLS_STORAGE_KEY);
     const parsed = text === null ? null : parseLibrary(text);
     const library = parsed?.ok ? parsed.library : starterLibrary();
-    const active = localStorage.getItem(ACTIVE_STORAGE_KEY);
-    return { library, activeId: library.tools.some((t) => t.id === active) ? active : (library.tools[0]?.id ?? null) };
+    return { library, activeId: resolveActiveTool(localStorage.getItem(ACTIVE_STORAGE_KEY), library) };
   } catch {
     // Storage can be unavailable (private mode, blocked site data).
-    const library = starterLibrary();
-    return { library, activeId: library.tools[0].id };
+    return { library: starterLibrary(), activeId: null };
   }
 }
 
@@ -57,8 +55,7 @@ export function useToolLibrary(): ToolLibraryState {
   useEffect(() => {
     try {
       localStorage.setItem(TOOLS_STORAGE_KEY, serializeLibrary(library));
-      if (activeId) localStorage.setItem(ACTIVE_STORAGE_KEY, activeId);
-      else localStorage.removeItem(ACTIVE_STORAGE_KEY);
+      localStorage.setItem(ACTIVE_STORAGE_KEY, activeId ?? '');
     } catch {
       // Quota exceeded or storage unavailable: keep working in memory.
     }
