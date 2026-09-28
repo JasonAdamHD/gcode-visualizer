@@ -99,6 +99,12 @@ npm run check        # lint + build + test: run before every commit
   - `stockMesh.ts`: per-tile mesh vertices (with the next tiles' first
     row and column, so tiles meet), the flat top over uncut tiles, and the
     skirt.
+  - `exactCut.ts`: the exact finished part: the sheet minus the convex
+    hull of the bit at each cutting segment's ends, unioned and subtracted
+    with `manifold-3d` (Apache-2.0, pinned exact; the only module that uses
+    it, taking the loaded library as a parameter so it is testable in Node).
+    `cuttingSegments` merges straight runs within the planner's arc
+    tolerance; jobs over `MAX_EXACT_STROKES` are skipped.
   - `camera.ts`: view presets, `framePose` (fits a box from a direction),
     `jobBounds`, ortho sizing. Camera up is always +Z; the top view leans a
     hair towards −Y so OrbitControls keeps an azimuth.
@@ -141,6 +147,9 @@ npm run check        # lint + build + test: run before every commit
   into a few buffers and uploads only the tiles a cut touched. Never rebuild
   the stock geometry during playback (only a checkpoint restore redraws it). Layers only toggle
   `visible`. A second (orthographic) camera is swapped in for Ortho.
+  At the end of playback it shows the exact part from `useExactCut` (a
+  Web Worker, `src/workers/exactCut.worker.ts`, restarted when the job
+  changes) instead of the stock, and skips simulating the stock there.
   `PlaybackBar.tsx` holds the playback controls, the scrubber strip and
   the readout.
 - `src/components/PlaybackWorkspace.tsx` owns the one playback clock
