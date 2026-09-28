@@ -22,8 +22,6 @@ export type ChipWorld = {
   surfaceAt: SurfaceAt;
   /** Chips falling off the sheet are dropped below this height. */
   lowest: number;
-  /** Bit diameter: chips leave from its edge. */
-  bitDiameter: number;
 };
 
 const axis = new THREE.Vector3();
@@ -36,7 +34,7 @@ export class ChipView {
   readonly mesh: THREE.InstancedMesh<THREE.BoxGeometry, THREE.MeshLambertMaterial>;
   private readonly chips: Chips = createChips(CHIP_CAPACITY);
   private readonly render: () => void;
-  private world: ChipWorld = { unitsPerMeter: 1000, surfaceAt: () => null, lowest: 0, bitDiameter: 1 };
+  private world: ChipWorld = { unitsPerMeter: 1000, surfaceAt: () => null, lowest: 0 };
   private frame = 0;
   private last = 0;
 
@@ -60,9 +58,9 @@ export class ChipView {
   }
 
   /** Throws `n` chips from `source` and keeps them moving. */
-  emit(n: number, source: Omit<ChipSource, 'unitsPerMeter' | 'bitDiameter'>) {
+  emit(n: number, source: Omit<ChipSource, 'unitsPerMeter'>) {
     if (n <= 0) return;
-    emitChips(this.chips, n, { ...source, unitsPerMeter: this.world.unitsPerMeter, bitDiameter: this.world.bitDiameter }, Math.random);
+    emitChips(this.chips, n, { ...source, unitsPerMeter: this.world.unitsPerMeter }, Math.random);
     this.start();
   }
 

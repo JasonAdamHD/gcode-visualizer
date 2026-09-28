@@ -7,7 +7,7 @@ import type { ManifoldToplevel } from 'manifold-3d';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Point3 } from '../toolpath/moves';
 import type { ExactBit, ExactStroke } from './exactCut';
-import { MAX_EXACT_STROKES, cuttingSegments, exactCut, segmentsKey, toolPoints } from './exactCut';
+import { MAX_EXACT_STROKES, cuttingSegments, cuttingSegmentsByTool, exactCut, segmentsKey, toolPoints } from './exactCut';
 
 const p = (x: number, y: number, z: number): Point3 => ({ x, y, z });
 const stroke = (a: Point3, b: Point3): ExactStroke => {
@@ -62,6 +62,14 @@ describe('cuttingSegments', () => {
     expect(n).toBeLessThan(strokes.length / 20);
   });
 
+  it('never merges across a tool change, and tags each segment with its tool', () => {
+    const pts = [p(0, 0, -1), p(1, 0, -1), p(2, 0, -1), p(3, 0, -1)];
+    const strokes = pts.slice(1).map((b, k) => stroke(pts[k], b));
+    const { segments, tools } = cuttingSegmentsByTool(strokes, 0.001, (i) => (i < 2 ? 0 : 1));
+    expect(Array.from(segments)).toEqual([0, 0, -1, 2, 0, -1, 2, 0, -1, 3, 0, -1]);
+    expect(Array.from(tools)).toEqual([0, 1]);
+  });
+
   it('keeps an arc chorded beyond the tolerance as separate segments', () => {
     const pts = Array.from({ length: 9 }, (_, k) => p(10 * Math.cos((k * Math.PI) / 16), 10 * Math.sin((k * Math.PI) / 16), -1));
     const strokes = pts.slice(1).map((b, k) => stroke(pts[k], b));
@@ -95,7 +103,7 @@ describe('toolPoints', () => {
 describe('exactCut', () => {
   const tolerance = 0.002;
   const cut = (bit: ExactBit, strokes: ExactStroke[]) =>
-    exactCut(wasm, { sheet, bit, segments: cuttingSegments(strokes, tolerance), tolerance });
+    exactCut(wasm, { sheet, bits: [bit], segments: cuttingSegments(strokes, tolerance), tolerance });
 
   it('leaves the sheet whole with nothing to cut', () => {
     expect(cut(flat, [stroke(p(10, 10, 5), p(90, 50, 5))]).volume).toBeCloseTo(sheetVolume, 3);
@@ -122,6 +130,19 @@ describe('exactCut', () => {
     // A slot running off the right edge removes only its part on the sheet.
     const off = cut(flat, [stroke(p(90, 30, -3), p(130, 30, -3))]);
     expect(sheetVolume - off.volume).toBeCloseTo(10 * 6 * 3 + (Math.PI * 9 * 3) / 2, 0);
+  });
+
+  it('cuts each segment with its own bit', () => {
+    const slots = cuttingSegmentsByTool(
+      [stroke(p(20, 15, -3), p(80, 15, -3)), stroke(p(20, 45, -3), p(80, 45, -3))],
+      tolerance,
+      (i) => i
+    );
+    const small: ExactBit = { diameter: 2, shape: { kind: 'flat' } };
+    const mesh = exactCut(wasm, { sheet, bits: [flat, small], ...slots, tolerance });
+    const removed = 60 * 6 * 3 + Math.PI * 9 * 3 + (60 * 2 * 3 + Math.PI * 1 * 3);
+    // The polygonal bits are a hair narrower than round across a slot.
+    expect(Math.abs(sheetVolume - mesh.volume - removed) / removed).toBeLessThan(0.001);
   });
 
   it('removes overlapping moves once', () => {

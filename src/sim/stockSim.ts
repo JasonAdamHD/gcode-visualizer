@@ -50,7 +50,7 @@ type Checkpoint = { block: number; tiles: (Float32Array | null)[] };
 export class StockSimulator {
   readonly stock: Stock;
   private readonly timeline: Timeline;
-  private readonly bit: Bit;
+  private readonly bitOf: (move: number) => Bit;
   private readonly maxCheckpoints: number;
   private checkpointWork: number;
   private checkpoints: Checkpoint[] = [];
@@ -58,10 +58,11 @@ export class StockSimulator {
   private block = 0;
   private distance = 0;
 
-  constructor(timeline: Timeline, stock: Stock, bit: Bit, options: StockSimulatorOptions = {}) {
+  /** `bitOf(m)` is the bit that cuts move `m` (a program can change tools). */
+  constructor(timeline: Timeline, stock: Stock, bitOf: (move: number) => Bit, options: StockSimulatorOptions = {}) {
     this.timeline = timeline;
     this.stock = stock;
-    this.bit = bit;
+    this.bitOf = bitOf;
     this.checkpointWork = options.checkpointWork ?? CHECKPOINT_WORK;
     this.maxCheckpoints = Math.max(1, options.maxCheckpoints ?? MAX_CHECKPOINTS);
   }
@@ -91,7 +92,7 @@ export class StockSimulator {
       if (work >= budget) return { done: false, dirty, progress: tb > 0 ? this.block / tb : 0 };
       const b = blocks[this.block];
       const end = this.block < tb ? b.length : ts;
-      const rect = cutSegment(this.stock, pointAt(b, this.distance), pointAt(b, end), this.bit);
+      const rect = cutSegment(this.stock, pointAt(b, this.distance), pointAt(b, end), this.bitOf(b.move));
       const cost = 1 + (rect ? (rect.i1 - rect.i0 + 1) * (rect.j1 - rect.j0 + 1) : 0);
       work += cost;
       dirty = unionRect(dirty, rect);

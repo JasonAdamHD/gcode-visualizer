@@ -21,6 +21,8 @@ import { useDrawingState } from './state/useDrawingState';
 import { useMachineParams } from './state/useMachineParams';
 import { useToolLibrary } from './state/useToolLibrary';
 import { applyTool } from './machine/tools';
+import { programTooling, singleTooling } from './machine/tooling';
+import type { Diagnostic } from './gcode/diagnostics';
 import { useProgram } from './state/useProgram';
 import { estimateCutTime } from './toolpath/estimate';
 import { buildMoves } from './toolpath/moves';
@@ -116,10 +118,24 @@ function App() {
     [program, units]
   );
   const moves = programMoves ?? drawingMoves;
-  const diagnostics = useMemo(
-    () => (program && programMoves ? [...program.diagnostics, ...analyzeProgram(programMoves, params)] : []),
-    [program, programMoves, params]
-  );
+  // Which bit cuts each move: a program's T/M6 tool changes look up the tool
+  // library; everything else (and unknown tools) uses the bit in the panel.
+  const { library: toolLibrary } = tools;
+  const { tooling, unknownTools } = useMemo(() => {
+    if (!programMoves) return { tooling: singleTooling(drawingMoves.length, params.bit), unknownTools: [] };
+    const result = programTooling(programMoves, toolLibrary, params.bit, units);
+    return { tooling: result.tooling, unknownTools: result.unknown };
+  }, [programMoves, drawingMoves.length, toolLibrary, params.bit, units]);
+  const diagnostics = useMemo(() => {
+    if (!program || !programMoves) return [];
+    const toolProblems: Diagnostic[] = unknownTools.map(({ number, line }) => ({
+      line,
+      severity: 'warning',
+      code: 'unknown-tool',
+      message: `T${number} is not in the tool library; cut with the bit in the panel`,
+    }));
+    return [...program.diagnostics, ...toolProblems, ...analyzeProgram(programMoves, params)];
+  }, [program, programMoves, params, unknownTools]);
   const lines = useMemo(() => (source ? sourceLines(source.text) : []), [source]);
   const workspaceProgram = useMemo<WorkspaceProgram | null>(
     () => (source && program ? { fileName: source.name, lines, diagnostics } : null),
@@ -201,6 +217,7 @@ function App() {
             viewToggle={viewToggle}
             moves={moves}
             params={params}
+            tooling={tooling}
             estimate={estimate}
             program={workspaceProgram}
           />
