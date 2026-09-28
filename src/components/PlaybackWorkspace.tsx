@@ -209,6 +209,7 @@ export function PlaybackWorkspace({ view, viewToggle, moves, params, estimate, p
               playbackBar={playbackBar}
               stepping={stepping}
               atEnd={timeline.total > 0 && playback.time >= timeline.total}
+              playing={playback.playing}
             />
           </Suspense>
         </ViewErrorBoundary>
