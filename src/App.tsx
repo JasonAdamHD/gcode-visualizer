@@ -19,6 +19,8 @@ import { parseGcode, sourceLines } from './gcode/parse';
 import { scaleMoves } from './gcode/scale';
 import { useDrawingState } from './state/useDrawingState';
 import { useMachineParams } from './state/useMachineParams';
+import { useToolLibrary } from './state/useToolLibrary';
+import { applyTool } from './machine/tools';
 import { useProgram } from './state/useProgram';
 import { estimateCutTime } from './toolpath/estimate';
 import { buildMoves } from './toolpath/moves';
@@ -49,6 +51,7 @@ function loadView(): ViewMode {
 function App() {
   const drawing = useDrawingState();
   const { params, update, setUnits, replace } = useMachineParams();
+  const tools = useToolLibrary();
   const [panelOpen, setPanelOpen] = useState(loadPanelOpen);
   const [view, setView] = useState(loadView);
   const programFile = useProgram();
@@ -214,6 +217,11 @@ function App() {
           onUnitsChange={applyUnits}
           onImport={applyParams}
           onReset={() => applyParams(DEFAULT_PARAMS)}
+          tools={tools}
+          onApplyTool={(id) => {
+            const tool = tools.library.tools.find((t) => t.id === id);
+            if (tool) update((p) => applyTool(p, tool));
+          }}
           open={panelOpen}
           onToggle={() => setPanelOpen((o) => !o)}
         />

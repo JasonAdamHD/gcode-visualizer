@@ -1,0 +1,59 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+.tool-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-details {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-details label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text);
+}
+
+.tool-details input {
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.tool-details input[type='number'] {
+  width: 4.5em;
+}
+
+.tool-details input[type='text'] {
+  flex: 1;
+}
+
+.tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.params-panel .tool-actions button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.params-panel .tool-actions button.danger {
+  border-color: var(--severity-error);
+  color: var(--severity-error);
+}
+
+/* The tool labels are long: the select takes the row, not the narrow field column. */
+.tool-picker .number-field {
+  grid-template-columns: auto 1fr;
+}

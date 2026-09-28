@@ -19,7 +19,9 @@ import { formatDuration } from '../toolpath/estimate';
 import { passDepths } from '../toolpath/moves';
 import type { CutSide } from '../toolpath/offset';
 import type { Toolpath } from '../toolpath/toolpath';
+import type { ToolLibraryState } from '../state/useToolLibrary';
 import { NumberField } from './NumberField';
+import { ToolPicker } from './ToolPicker';
 import './ParametersPanel.css';
 
 /** What the panel shows about an open G-code program. */
@@ -50,6 +52,10 @@ type ParametersPanelProps = {
   /** Applies imported params; the caller also rescales the drawing if units differ. */
   onImport: (params: MachineParams) => void;
   onReset: () => void;
+  /** The tool library and the picked tool. */
+  tools: ToolLibraryState;
+  /** Cuts with a library tool. */
+  onApplyTool: (toolId: string) => void;
   open: boolean;
   onToggle: () => void;
 };
@@ -105,6 +111,8 @@ export function ParametersPanel({
   onUnitsChange,
   onImport,
   onReset,
+  tools,
+  onApplyTool,
   open,
   onToggle,
 }: ParametersPanelProps) {
@@ -243,6 +251,7 @@ export function ParametersPanel({
 
       <fieldset>
         <legend>Bit</legend>
+        <ToolPicker params={params} tools={tools} onApply={onApplyTool} />
         <div className="number-field">
           <label htmlFor="bit-shape">Shape</label>
           <select
