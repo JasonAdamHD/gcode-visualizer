@@ -51,6 +51,12 @@ npm run check        # lint + build + test: run before every commit
   shape; it only affects how chips are shown, never the cut. `bit.fluteCount`
   and `spindleRpm` give the chip load (a program's S words override the
   spindle speed, as F does the feed).
+- `src/machine/tools.ts` holds the pure tool library model: `Tool` (bit
+  fields, tool number, optional feeds and spindle speed, in the tool's own
+  units) and a versioned `ToolLibrary`, with validation, JSON
+  (de)serialization, `toolFromParams` and `applyTool` (converting units).
+  Every tool has a random `id` and an `updatedAt`, so libraries can be
+  merged when synced to an account later; keep both on every change.
 - `src/toolpath/` turns the drawing into machine motion (pure, tested):
   - `offset.ts`: cutter compensation. The **only** module that imports
     `cavalier-contours-js` (pinned exact); never offset paths by hand.
@@ -136,6 +142,9 @@ npm run check        # lint + build + test: run before every commit
   clamps when the timeline changes, and pauses on `stops` (breakpoints)
   and a one-off `runTo` target; seeks ignore stops. `playbackSpeed.ts`
   maps the log speed slider (with detents) to a speed.
+- `src/state/useToolLibrary.ts` holds the library and the picked tool in
+  localStorage; picking a tool applies it to the params (in `App`), and
+  `ToolPicker` shows when the bit has been edited since.
 - `src/state/useLayers.ts` holds the 3D layer toggles, per viewer in
   localStorage.
 - `src/state/useProgram.ts` holds the open G-code file's name and text,
