@@ -57,3 +57,32 @@
 .tool-picker .number-field {
   grid-template-columns: auto 1fr;
 }
+
+.tool-import {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tool-import p {
+  margin: 0;
+  color: var(--text-h);
+}
+
+.tool-import.failed p {
+  color: var(--severity-error);
+}
+
+.tool-import ul {
+  margin: 4px 0;
+  padding-left: 18px;
+  max-height: 8em;
+  overflow-y: auto;
+}
+
+.params-panel .tool-import button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+}

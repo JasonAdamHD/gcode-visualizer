@@ -57,6 +57,11 @@ npm run check        # lint + build + test: run before every commit
   (de)serialization, `toolFromParams` and `applyTool` (converting units).
   Every tool has a random `id` and an `updatedAt`, so libraries can be
   merged when synced to an account later; keep both on every change.
+  `mergeTools` adds imported tools (same id: newer wins; missing or taken
+  numbers get the next free one). `fusionTools.ts` reads Autodesk Fusion
+  tool library exports (flat, ball, bull nose as flat, chamfer mill `TA`
+  half angle and counter sink `SIG` point angle as V-bits; other types are
+  skipped with a reason) and `readToolFile` tells the two formats apart.
 - `src/toolpath/` turns the drawing into machine motion (pure, tested):
   - `offset.ts`: cutter compensation. The **only** module that imports
     `cavalier-contours-js` (pinned exact); never offset paths by hand.

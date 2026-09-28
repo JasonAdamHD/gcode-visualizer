@@ -2,10 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
+import { readToolFile } from '../machine/fusionTools';
 import type { MachineParams } from '../machine/params';
 import { displayDecimals, formatNumber } from '../machine/params';
-import { paramsMatchTool, toolLabel } from '../machine/tools';
+import { paramsMatchTool, serializeLibrary, toolLabel } from '../machine/tools';
 import type { ToolLibraryState } from '../state/useToolLibrary';
 import './ToolPicker.css';
 
@@ -15,6 +17,11 @@ type ToolPickerProps = {
   /** Cuts with a tool: applies its bit, feeds and spindle speed to the params. */
   onApply: (toolId: string) => void;
 };
+
+const EXPORT_FILENAME = 'cnc-tools.json';
+
+/** What an import did, for the panel: a headline and the details. */
+type ImportSummary = { ok: boolean; headline: string; details: string[] };
 
 /** A default name for the params' current bit, e.g. `0.25 in flat up-cut`. */
 function describeBit(params: MachineParams): string {
@@ -32,6 +39,43 @@ function describeBit(params: MachineParams): string {
 export function ToolPicker({ params, tools, onApply }: ToolPickerProps) {
   const { library, active } = tools;
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [summary, setSummary] = useState<ImportSummary | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const read = readToolFile(await file.text());
+    if (!read.ok) {
+      setSummary({ ok: false, headline: `Could not import ${file.name}: ${read.error}`, details: [] });
+      return;
+    }
+    const merged = tools.importTools(read.import.tools);
+    const source = read.format === 'fusion' ? 'Fusion library' : 'tool library';
+    const parts = [`${merged.added} added`, `${merged.updated} updated`];
+    setSummary({
+      ok: true,
+      headline: `Imported ${file.name} (${source}): ${parts.join(', ')}.`,
+      details: [
+        ...merged.renumbered.map((t) => `${t.name}: numbered T${t.number} (its number was missing or taken)`),
+        ...read.import.skipped.map((t) => `Skipped ${t.name}: ${t.reason}`),
+        ...merged.ignored.map((t) => `Skipped ${t.name}: ${t.reason}`),
+        ...read.import.notes,
+      ],
+    });
+  };
+
+  const handleExport = () => {
+    const blob = new Blob([serializeLibrary(library)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = EXPORT_FILENAME;
+    a.click();
+    // Some browsers resolve the blob URL asynchronously; revoke after the download starts.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
   const edited = active !== null && !paramsMatchTool(params, active);
   const numberTaken = (n: number) => library.tools.some((t) => t.number === n && t.id !== active?.id);
 
@@ -119,6 +163,30 @@ export function ToolPicker({ params, tools, onApply }: ToolPickerProps) {
           ))}
       </div>
       {edited && <p className="derived note">Edited since T{active.number} was picked.</p>}
+      <div className="tool-actions">
+        <button type="button" onClick={() => fileRef.current?.click()} title="Add tools from this app's tool file or a Fusion tool library (.json)">
+          Import tools…
+        </button>
+        <button type="button" onClick={handleExport} disabled={library.tools.length === 0} title="Download the library as a .json file">
+          Export tools
+        </button>
+        <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={handleImport} />
+      </div>
+      {summary && (
+        <div className={summary.ok ? 'tool-import' : 'tool-import failed'} role="status">
+          <p>{summary.headline}</p>
+          {summary.details.length > 0 && (
+            <ul>
+              {summary.details.map((d) => (
+                <li key={d}>{d}</li>
+              ))}
+            </ul>
+          )}
+          <button type="button" className="link" onClick={() => setSummary(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
     </div>
   );
 }
