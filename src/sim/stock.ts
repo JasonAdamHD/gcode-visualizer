@@ -15,7 +15,8 @@ export const MAX_CELLS = 1 << 20;
 /** Target grid spacing is the bit diameter divided by this, unless `MAX_CELLS` coarsens it. */
 export const CELLS_PER_DIAMETER = 8;
 
-export type Bit = MachineParams['bit'];
+/** What cutting needs of the bit: its diameter and tip shape (flute direction only moves chips). */
+export type Bit = Pick<MachineParams['bit'], 'diameter' | 'shape'>;
 
 /**
  * Heights of the material surface at `nx × ny` grid points: point `(i, j)`

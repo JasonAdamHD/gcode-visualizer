@@ -217,7 +217,7 @@ describe('compensationRadius', () => {
   const withBit = (diameter: number, shape: MachineParams['bit']['shape'], thickness: number): MachineParams => ({
     ...DEFAULT_PARAMS,
     sheet: { ...DEFAULT_PARAMS.sheet, thickness },
-    bit: { diameter, shape },
+    bit: { diameter, shape, flute: { kind: 'up' } },
     spoilboardPenetration: 0,
   });
 

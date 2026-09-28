@@ -17,6 +17,23 @@ export type BitShape =
 export type BitKind = BitShape['kind'];
 
 /**
+ * Which way the bit's spiral flutes lift chips, independent of its tip
+ * shape. Up-cut pulls chips up out of the cut, down-cut pushes them down
+ * into it, and a compression bit is up-cut for `upcutLength` from the tip
+ * and down-cut above that, so the top face is cut downwards and the
+ * bottom face upwards.
+ */
+export type FluteDirection =
+  | { kind: 'up' }
+  | { kind: 'down' }
+  | { kind: 'compression'; upcutLength: number };
+
+export type FluteKind = FluteDirection['kind'];
+
+/** Up-cut length of a compression bit when none is given, in inches (a common 1/4" bit's mortise length). */
+export const DEFAULT_UPCUT_LENGTH_IN = 0.125;
+
+/**
  * Machine/job configuration. Every length is in `units`; rates are in
  * `units` per minute, acceleration in `units` per second². Angles are
  * degrees and are unit-independent.
@@ -25,7 +42,7 @@ export type MachineParams = {
   version: 2;
   units: Units;
   sheet: { x: number; y: number; thickness: number };
-  bit: { diameter: number; shape: BitShape };
+  bit: { diameter: number; shape: BitShape; flute: FluteDirection };
   /** Units per minute, XY cutting moves. */
   feedRate: number;
   /** Units per minute, Z moves. */
@@ -53,6 +70,7 @@ export type FieldKey =
   | 'sheet.thickness'
   | 'bit.diameter'
   | 'bit.includedAngleDeg'
+  | 'bit.upcutLength'
   | 'feedRate'
   | 'plungeRate'
   | 'spoilboardPenetration'
@@ -70,7 +88,7 @@ export const DEFAULT_PARAMS: MachineParams = {
   version: 2,
   units: 'in',
   sheet: { x: 96, y: 48, thickness: 0.75 },
-  bit: { diameter: 0.25, shape: { kind: 'flat' } },
+  bit: { diameter: 0.25, shape: { kind: 'flat' }, flute: { kind: 'up' } },
   feedRate: 200,
   plungeRate: 50,
   spoilboardPenetration: 0.01,
@@ -92,13 +110,14 @@ export function unitFactor(from: Units, to: Units): number {
 
 /**
  * Converts every length, rate and acceleration in `params` to `to` units,
- * so the physical job is unchanged. Angles and bit kind are left alone. Values are not
+ * so the physical job is unchanged. Angles and bit and flute kinds are left alone. Values are not
  * rounded (round only for display). Returns `params` itself if the units
  * already match.
  */
 export function convertParams(params: MachineParams, to: Units): MachineParams {
   if (params.units === to) return params;
   const f = unitFactor(params.units, to);
+  const flute = params.bit.flute;
   return {
     version: 2,
     units: to,
@@ -107,7 +126,11 @@ export function convertParams(params: MachineParams, to: Units): MachineParams {
       y: params.sheet.y * f,
       thickness: params.sheet.thickness * f,
     },
-    bit: { diameter: params.bit.diameter * f, shape: params.bit.shape },
+    bit: {
+      diameter: params.bit.diameter * f,
+      shape: params.bit.shape,
+      flute: flute.kind === 'compression' ? { kind: 'compression', upcutLength: flute.upcutLength * f } : flute,
+    },
     feedRate: params.feedRate * f,
     plungeRate: params.plungeRate * f,
     spoilboardPenetration: params.spoilboardPenetration * f,
@@ -138,8 +161,8 @@ const isNum = (v: number) => typeof v === 'number' && Number.isFinite(v);
 /**
  * Field-level hard errors (empty object when valid). Lengths, rates and
  * acceleration must be positive, spoilboard penetration and junction
- * deviation non-negative, and a V-bit's included angle strictly between 0°
- * and 180°.
+ * deviation non-negative, a V-bit's included angle strictly between 0°
+ * and 180°, and a compression bit's up-cut length positive.
  */
 export function validateParams(params: MachineParams): ValidationErrors {
   const errors: ValidationErrors = {};
@@ -166,6 +189,7 @@ export function validateParams(params: MachineParams): ValidationErrors {
     const a = params.bit.shape.includedAngleDeg;
     if (!isNum(a) || a <= 0 || a >= 180) errors['bit.includedAngleDeg'] = 'Must be between 0° and 180°';
   }
+  if (params.bit.flute.kind === 'compression') positive('bit.upcutLength', params.bit.flute.upcutLength);
   return errors;
 }
 
@@ -185,8 +209,9 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
  * extra fields are dropped. Never throws.
  *
  * Version 1 (before the motion fields existed) is migrated: the missing
- * fields take `DEFAULT_PARAMS` converted into the file's units, so old
- * localStorage and exported files keep working. Other versions are rejected.
+ * fields take `DEFAULT_PARAMS` converted into the file's units. Other
+ * versions are rejected, and so is any file without `bit.flute` (added
+ * before the app had users, so it has no migration).
  */
 export function parseParams(text: string): ParseResult {
   let raw: unknown;
@@ -214,6 +239,7 @@ export function parseParams(text: string): ParseResult {
   const { sheet, bit } = raw;
   if (!isObject(sheet)) return { ok: false, error: 'Missing sheet' };
   if (!isObject(bit) || !isObject(bit.shape)) return { ok: false, error: 'Missing bit' };
+  if (!isObject(bit.flute)) return { ok: false, error: 'Missing bit flute direction' };
 
   const numbers: [string, unknown][] = [
     ['sheet.x', sheet.x],
@@ -250,11 +276,25 @@ export function parseParams(text: string): ParseResult {
       return { ok: false, error: 'Unknown bit shape' };
   }
 
+  let flute: FluteDirection;
+  switch (bit.flute.kind) {
+    case 'up':
+    case 'down':
+      flute = { kind: bit.flute.kind };
+      break;
+    case 'compression':
+      if (typeof bit.flute.upcutLength !== 'number') return { ok: false, error: 'bit.upcutLength must be a number' };
+      flute = { kind: 'compression', upcutLength: bit.flute.upcutLength };
+      break;
+    default:
+      return { ok: false, error: 'Unknown flute direction' };
+  }
+
   const params: MachineParams = {
     version: 2,
     units,
     sheet: { x: sheet.x as number, y: sheet.y as number, thickness: sheet.thickness as number },
-    bit: { diameter: bit.diameter as number, shape },
+    bit: { diameter: bit.diameter as number, shape, flute },
     feedRate: raw.feedRate as number,
     plungeRate: raw.plungeRate as number,
     spoilboardPenetration: raw.spoilboardPenetration as number,

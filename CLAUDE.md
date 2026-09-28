@@ -46,7 +46,9 @@ npm run check        # lint + build + test: run before every commit
   `parseParams` migrates version 1 by filling the motion fields with
   defaults in the file's units; bump the version and add a migration for
   any future shape change. `BitShape` is a discriminated union so a custom
-  drawn profile can be added later.
+  drawn profile can be added later. `bit.flute` (`FluteDirection`: up,
+  down, or compression with an `upcutLength`) is separate from the tip
+  shape; it only affects how chips are shown, never the cut.
 - `src/toolpath/` turns the drawing into machine motion (pure, tested):
   - `offset.ts`: cutter compensation. The **only** module that imports
     `cavalier-contours-js` (pinned exact); never offset paths by hand.
