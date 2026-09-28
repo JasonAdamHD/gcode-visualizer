@@ -21,6 +21,7 @@ import {
   restoreTiles,
   snapshotTiles,
   stockGrid,
+  surfaceHeight,
   takeDirtyTiles,
   tipOffset,
   touchedTiles,
@@ -167,6 +168,15 @@ describe('tiles', () => {
     cutSegment(stock, p(x, 15, 1), p(x, 15, -2), flat);
     const t = (Math.round(15 / stock.dy) >> 6) * stock.tx;
     expect(takeDirtyTiles(stock).sort((a, b) => a - b)).toEqual([t, t + 1]);
+  });
+
+  it('reads the surface height at a world point, null off the sheet', () => {
+    const stock = createStock(sheet, flat);
+    cutSegment(stock, p(20, 30, -3), p(80, 30, -3), flat);
+    expect(surfaceHeight(stock, 50, 30)).toBe(-3);
+    expect(surfaceHeight(stock, 50, 40)).toBe(0);
+    expect(surfaceHeight(stock, -1, 30)).toBeNull();
+    expect(surfaceHeight(stock, 50, 60.5)).toBeNull();
   });
 
   it('counts the material removed, once', () => {

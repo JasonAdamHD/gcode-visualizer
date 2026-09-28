@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FluteDirection } from '../machine/params';
-import type { ChipSource } from './chips';
+import type { ChipSource, SurfaceAt } from './chips';
 import { chipAngle, chipScale, chipsForVolume, createChips, emitChips, launchChip, stepChips, upShare } from './chips';
 
 /** Deterministic pseudo-random numbers in [0, 1). */
@@ -49,16 +49,16 @@ describe('upShare and launchChip', () => {
     expect(shareUp(source(compression, 8))).toBeLessThan(0.2);
   });
 
-  it('sends chips up out of the cut to rest on the sheet top, and keeps the rest on the cut floor', () => {
+  it('sends chips thrown up upward and keeps the rest moving slowly in the cut', () => {
     const rand = random(3);
     for (let k = 0; k < 500; k++) {
       const chip = launchChip(source(up), rand);
       if (chip.up) {
         expect(chip.velocity.z).toBeGreaterThan(0);
-        expect(chip.floor).toBe(0);
       } else {
         expect(chip.velocity.z).toBeLessThanOrEqual(0);
-        expect(chip.floor).toBe(-3);
+        expect(chip.position.z).toBeGreaterThanOrEqual(-3);
+        expect(Math.hypot(chip.velocity.x, chip.velocity.y)).toBeLessThan(0.3 * MM);
       }
     }
   });
@@ -88,6 +88,11 @@ describe('upShare and launchChip', () => {
 
 describe('emitChips and stepChips', () => {
   const sheet = { x: 100, y: 60 };
+  // A groove 3 deep and 6 wide along y = 30, cut from x = 20 to 80.
+  const groove: SurfaceAt = (x, y) => {
+    if (x < 0 || y < 0 || x > sheet.x || y > sheet.y) return null;
+    return x >= 20 && x <= 80 && Math.abs(y - 30) <= 3 ? -3 : 0;
+  };
 
   it('adds chips up to the capacity', () => {
     const chips = createChips(10);
@@ -96,26 +101,31 @@ describe('emitChips and stepChips', () => {
     expect(chips.count).toBe(10);
   });
 
-  it('flies chips under gravity until they rest on their floor, then removes them at the end of life', () => {
-    const chips = createChips(200);
+  it('flies chips under gravity until they rest on the surface below them, then removes them', () => {
+    const chips = createChips(400);
     emitChips(chips, 200, source(up), random(9));
+    emitChips(chips, 200, source(down), random(10));
     const lowest = -20;
     let t = 0;
     let everLanded = 0;
+    let inGroove = 0;
     while (chips.count > 0 && t < 10) {
-      stepChips(chips, 1 / 60, MM, sheet, lowest);
+      stepChips(chips, 1 / 60, MM, groove, lowest);
       t += 1 / 60;
       for (let c = 0; c < chips.count; c++) {
-        // Never below its floor while on the sheet.
-        const x = chips.pos[c * 3];
-        const y = chips.pos[c * 3 + 1];
-        if (x >= 0 && y >= 0 && x <= sheet.x && y <= sheet.y) expect(chips.pos[c * 3 + 2]).toBeGreaterThanOrEqual(chips.floor[c] - 1e-4);
+        const surface = groove(chips.pos[c * 3], chips.pos[c * 3 + 1]);
+        // Never below the material while over the sheet.
+        if (surface !== null) expect(chips.pos[c * 3 + 2]).toBeGreaterThanOrEqual(surface - 1e-4);
         if (chips.landed[c]) {
           everLanded++;
           expect(chips.vel[c * 3 + 2]).toBe(0);
+          // Resting on the surface where it came down: the groove floor or the sheet top.
+          expect(chips.pos[c * 3 + 2]).toBe(surface);
+          if (surface === -3) inGroove++;
         }
       }
     }
+    expect(inGroove).toBeGreaterThan(0);
     expect(everLanded).toBeGreaterThan(0);
     expect(chips.count).toBe(0);
     expect(t).toBeLessThan(3.3);
@@ -128,13 +138,13 @@ describe('emitChips and stepChips', () => {
     let before = chipAngle(chips, 0);
     for (let k = 0; k < 600 && !chips.landed[0] && chips.count > 0; k++) {
       before = chipAngle(chips, 0);
-      stepChips(chips, 1 / 240, MM, sheet, -20);
+      stepChips(chips, 1 / 240, MM, groove, -20);
     }
     expect(chips.landed[0]).toBe(1);
     const rest = chipAngle(chips, 0);
     // Within one step's worth of tumbling of where it was, then fixed.
     expect(Math.abs(rest - before)).toBeLessThanOrEqual(Math.abs(chips.spin[0] / chips.age[0]) / 240 + 1e-6);
-    stepChips(chips, 0.1, MM, sheet, -20);
+    stepChips(chips, 0.1, MM, groove, -20);
     expect(chipAngle(chips, 0)).toBe(rest);
   });
 
@@ -142,7 +152,7 @@ describe('emitChips and stepChips', () => {
     const chips = createChips(1);
     emitChips(chips, 1, { ...source(up), tip: { x: 50, y: 30, z: 0 }, flute: up }, () => 0.01);
     const vz = chips.vel[2];
-    stepChips(chips, 0.05, MM, sheet, -20);
+    stepChips(chips, 0.05, MM, groove, -20);
     expect(chips.vel[2]).toBeLessThan(vz);
   });
 

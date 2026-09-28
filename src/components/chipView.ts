@@ -7,7 +7,7 @@
 // this runs its own animation frames while any chip is alive and asks the
 // scene to redraw each one.
 import * as THREE from 'three';
-import type { ChipSource, Chips } from '../sim/chips';
+import type { ChipSource, Chips, SurfaceAt } from '../sim/chips';
 import { chipAngle, chipScale, createChips, emitChips, stepChips } from '../sim/chips';
 
 /** Most chips alive at once. */
@@ -18,7 +18,8 @@ const MAX_STEP = 0.05;
 
 export type ChipWorld = {
   unitsPerMeter: number;
-  sheet: { x: number; y: number };
+  /** Where chips come to rest: the stock's surface. */
+  surfaceAt: SurfaceAt;
   /** Chips falling off the sheet are dropped below this height. */
   lowest: number;
   bitDiameter: number;
@@ -34,7 +35,7 @@ export class ChipView {
   readonly mesh: THREE.InstancedMesh<THREE.BoxGeometry, THREE.MeshLambertMaterial>;
   private readonly chips: Chips = createChips(CHIP_CAPACITY);
   private readonly render: () => void;
-  private world: ChipWorld = { unitsPerMeter: 1000, sheet: { x: 0, y: 0 }, lowest: 0, bitDiameter: 1 };
+  private world: ChipWorld = { unitsPerMeter: 1000, surfaceAt: () => null, lowest: 0, bitDiameter: 1 };
   private frame = 0;
   private last = 0;
 
@@ -90,8 +91,8 @@ export class ChipView {
     this.frame = 0;
     const dt = Math.min(MAX_STEP, (now - this.last) / 1000);
     this.last = now;
-    const { unitsPerMeter, sheet, lowest, bitDiameter } = this.world;
-    stepChips(this.chips, dt, unitsPerMeter, sheet, lowest);
+    const { unitsPerMeter, surfaceAt, lowest, bitDiameter } = this.world;
+    stepChips(this.chips, dt, unitsPerMeter, surfaceAt, lowest);
     this.writeInstances(bitDiameter);
     this.render();
     if (this.chips.count > 0) this.frame = requestAnimationFrame(this.tick);

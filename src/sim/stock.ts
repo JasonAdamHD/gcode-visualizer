@@ -172,6 +172,17 @@ export function heightAt(stock: Stock, i: number, j: number): number {
   return tile ? tile[((j & TILE_MASK) << TILE_SHIFT) | (i & TILE_MASK)] : 0;
 }
 
+/**
+ * The material surface's height at world point `(x, y)` (the nearest grid
+ * point's), or null off the sheet.
+ */
+export function surfaceHeight(stock: Stock, x: number, y: number): number | null {
+  const i = Math.round(x / stock.dx);
+  const j = Math.round(y / stock.dy);
+  if (i < 0 || j < 0 || i >= stock.nx || j >= stock.ny) return null;
+  return heightAt(stock, i, j);
+}
+
 /** Number of tiles holding cut material. */
 export function allocatedTiles(stock: Stock): number {
   let n = 0;

@@ -20,7 +20,7 @@ import { kindLayer } from '../sim/layers';
 import { bitProfile, kindCounts, moveLineBuffers, pathBuffer } from '../sim/sceneData';
 import type { MoveKind } from '../sim/sceneData';
 import type { DirtyRect, Stock } from '../sim/stock';
-import { stockFromGrid, stockGrid } from '../sim/stock';
+import { stockFromGrid, stockGrid, surfaceHeight } from '../sim/stock';
 import type { Rgb } from '../sim/stockMesh';
 import type { CutTarget } from '../sim/stockSim';
 import { StockSimulator } from '../sim/stockSim';
@@ -725,7 +725,13 @@ export default function Viewer3D({
     if (!s) return;
     s.chips.setWorld({
       unitsPerMeter,
-      sheet: { x: sheetX, y: sheetY },
+      // The live stock, so chips settle into grooves already cut; the flat
+      // sheet top while there is none yet.
+      surfaceAt: (x, y) => {
+        const st = stockRef.current;
+        if (st) return surfaceHeight(st.stock, x, y);
+        return x >= 0 && y >= 0 && x <= sheetX && y <= sheetY ? 0 : null;
+      },
       lowest: -thickness - SPOILBOARD_IN * unitFactor('in', params.units) * 4,
       bitDiameter,
     });

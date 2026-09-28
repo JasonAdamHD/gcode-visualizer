@@ -49,8 +49,6 @@ export type Chips = {
   pos: Float32Array;
   /** Velocity per chip, world units per second. */
   vel: Float32Array;
-  /** Height where the chip comes to rest. */
-  floor: Float32Array;
   /**
    * Tumbling: a unit axis per chip and its rate in radians per second; once
    * the chip has landed, the angle it came to rest at (`chipAngle`).
@@ -70,7 +68,6 @@ export function createChips(capacity: number): Chips {
     count: 0,
     pos: new Float32Array(capacity * 3),
     vel: new Float32Array(capacity * 3),
-    floor: new Float32Array(capacity),
     axis: new Float32Array(capacity * 3),
     spin: new Float32Array(capacity),
     age: new Float32Array(capacity),
@@ -114,15 +111,15 @@ export function upShare(flute: FluteDirection, depth: number): number {
   }
 }
 
-/** A launched chip: offset from the bit axis, velocity, and where it will rest. */
-export type Launch = { position: Point3; velocity: Point3; floor: number; up: boolean };
+/** A launched chip: its position and velocity, and whether it was thrown up and out. */
+export type Launch = { position: Point3; velocity: Point3; up: boolean };
 
 /**
  * One chip's launch from `source`: it leaves the bit's edge at a random
  * angle on the side behind the bit, flung along the edge's clockwise
- * motion. Chips thrown up leave from the top of the cut with an upward
- * speed and come to rest on the sheet top; the rest stay in the cut, moving
- * slowly, and rest on its floor.
+ * motion. Chips thrown up leave the cut with an upward speed; the rest stay
+ * in it, moving slowly. Either way they come to rest on the material
+ * surface wherever they come down (see `stepChips`).
  */
 export function launchChip(source: ChipSource, rand: Random): Launch {
   const { tip, travel, bitDiameter, unitsPerMeter: m } = source;
@@ -148,7 +145,6 @@ export function launchChip(source: ChipSource, rand: Random): Launch {
         y: fling * tangent.y + out * edge.y,
         z: between(UP_SPEED, rand) * m,
       },
-      floor: 0,
       up,
     };
   }
@@ -156,7 +152,6 @@ export function launchChip(source: ChipSource, rand: Random): Launch {
   return {
     position: { x: tip.x + r * edge.x * rand(), y: tip.y + r * edge.y * rand(), z: tip.z + depth * rand() },
     velocity: { x: fling * tangent.x, y: fling * tangent.y, z: -0.1 * m * rand() },
-    floor: tip.z,
     up,
   };
 }
@@ -166,10 +161,9 @@ export function emitChips(chips: Chips, n: number, source: ChipSource, rand: Ran
   const room = Math.min(n, chips.capacity - chips.count);
   for (let k = 0; k < room; k++) {
     const c = chips.count++;
-    const { position: p, velocity: v, floor } = launchChip(source, rand);
+    const { position: p, velocity: v } = launchChip(source, rand);
     chips.pos.set([p.x, p.y, p.z], c * 3);
     chips.vel.set([v.x, v.y, v.z], c * 3);
-    chips.floor[c] = floor;
     // A random tumble axis (unit length).
     const u = 2 * rand() - 1;
     const a = 2 * Math.PI * rand();
@@ -185,18 +179,18 @@ export function emitChips(chips: Chips, n: number, source: ChipSource, rand: Ran
 }
 
 /**
- * Advances every chip by `dt` seconds: gravity (in world units via
- * `unitsPerMeter`) and drag while flying, resting once it drops to its
- * floor, and removal at the end of its life. Chips that fall past the
- * sheet's edge keep falling until `lowest`, then go.
+ * The material surface's height at a world point (a cut groove's floor, the
+ * sheet top), or null off the sheet.
  */
-export function stepChips(
-  chips: Chips,
-  dt: number,
-  unitsPerMeter: number,
-  sheet: { x: number; y: number },
-  lowest: number
-) {
+export type SurfaceAt = (x: number, y: number) => number | null;
+
+/**
+ * Advances every chip by `dt` seconds: gravity (in world units via
+ * `unitsPerMeter`) and drag while flying, coming to rest once it drops to
+ * the surface below it (`surfaceAt`), and removal at the end of its life.
+ * Chips off the sheet keep falling until `lowest`, then go.
+ */
+export function stepChips(chips: Chips, dt: number, unitsPerMeter: number, surfaceAt: SurfaceAt, lowest: number) {
   const g = GRAVITY * unitsPerMeter;
   const decay = Math.exp(-DRAG * dt);
   let c = 0;
@@ -211,16 +205,14 @@ export function stepChips(
       chips.pos[i] += chips.vel[i] * dt;
       chips.pos[i + 1] += chips.vel[i + 1] * dt;
       chips.pos[i + 2] += chips.vel[i + 2] * dt;
-      const x = chips.pos[i];
-      const y = chips.pos[i + 1];
-      const onSheet = x >= 0 && y >= 0 && x <= sheet.x && y <= sheet.y;
-      if (onSheet && chips.vel[i + 2] < 0 && chips.pos[i + 2] <= chips.floor[c]) {
-        chips.pos[i + 2] = chips.floor[c];
+      const surface = surfaceAt(chips.pos[i], chips.pos[i + 1]);
+      if (surface !== null && chips.vel[i + 2] < 0 && chips.pos[i + 2] <= surface) {
+        chips.pos[i + 2] = surface;
         chips.vel.fill(0, i, i + 3);
         // Stop tumbling where it is: keep the angle rather than the rate.
         chips.spin[c] *= chips.age[c];
         chips.landed[c] = 1;
-      } else if (!onSheet && chips.pos[i + 2] < lowest) {
+      } else if (surface === null && chips.pos[i + 2] < lowest) {
         dead = true;
       }
     }
@@ -239,7 +231,6 @@ function removeChip(chips: Chips, c: number) {
   chips.pos.copyWithin(c * 3, last * 3, last * 3 + 3);
   chips.vel.copyWithin(c * 3, last * 3, last * 3 + 3);
   chips.axis.copyWithin(c * 3, last * 3, last * 3 + 3);
-  chips.floor[c] = chips.floor[last];
   chips.spin[c] = chips.spin[last];
   chips.age[c] = chips.age[last];
   chips.life[c] = chips.life[last];
