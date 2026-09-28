@@ -19,6 +19,8 @@ export type Layers = {
   /** The path not played yet; off shows only the traversed path. */
   untraversed: boolean;
   axes: boolean;
+  /** Wood chips thrown off the bit while it cuts. */
+  chips: boolean;
 };
 
 export type LayerKey = keyof Layers;
@@ -31,6 +33,7 @@ export const DEFAULT_LAYERS: Layers = {
   rapid: true,
   untraversed: true,
   axes: true,
+  chips: true,
 };
 
 /** The layer that shows moves of `kind`. */

@@ -58,6 +58,9 @@ export type StockGrid = {
  * `shared[t]` is 1 while that array is also held by a checkpoint, so it is
  * copied before its first write. `dirtyTiles` lists the tiles whose
  * meshes changed since the last `takeDirtyTiles` (flagged in `dirty`).
+ * `removed` sums every height drop ever cut (never reset, not even by a
+ * restore); times `dx·dy` it is a volume, so its change over a step is the
+ * material that step removed.
  */
 export type Stock = StockGrid & {
   floor: number;
@@ -65,6 +68,7 @@ export type Stock = StockGrid & {
   shared: Uint8Array;
   dirty: Uint8Array;
   dirtyTiles: number[];
+  removed: number;
 };
 
 /** Grid points a cut may have changed: `i0..i1` × `j0..j1`, inclusive. */
@@ -153,6 +157,7 @@ export function stockFromGrid(sheet: MachineParams['sheet'], grid: StockGrid): S
     shared: new Uint8Array(n),
     dirty: new Uint8Array(n),
     dirtyTiles: [],
+    removed: 0,
   };
 }
 
@@ -165,6 +170,17 @@ export function createStock(sheet: MachineParams['sheet'], bit: Bit, strokes: re
 export function heightAt(stock: Stock, i: number, j: number): number {
   const tile = stock.tiles[(j >> TILE_SHIFT) * stock.tx + (i >> TILE_SHIFT)];
   return tile ? tile[((j & TILE_MASK) << TILE_SHIFT) | (i & TILE_MASK)] : 0;
+}
+
+/**
+ * The material surface's height at world point `(x, y)` (the nearest grid
+ * point's), or null off the sheet.
+ */
+export function surfaceHeight(stock: Stock, x: number, y: number): number | null {
+  const i = Math.round(x / stock.dx);
+  const j = Math.round(y / stock.dy);
+  if (i < 0 || j < 0 || i >= stock.nx || j >= stock.ny) return null;
+  return heightAt(stock, i, j);
 }
 
 /** Number of tiles holding cut material. */
@@ -317,8 +333,10 @@ export function cutSegment(stock: Stock, from: Point3, to: Point3, bit: Bit): Di
       const t = tileRow + (i >> TILE_SHIFT);
       const k = rowInTile | (i & TILE_MASK);
       const current = stock.tiles[t];
-      if (cut >= (current ? current[k] : 0)) continue;
+      const previous = current ? current[k] : 0;
+      if (cut >= previous) continue;
       writableTile(stock, t)[k] = cut;
+      stock.removed += previous - cut;
       markDirty(stock, t);
       // The tiles before a first row or column show it too; allocating them
       // keeps an uncut neighbor's flat top from covering this cut edge.

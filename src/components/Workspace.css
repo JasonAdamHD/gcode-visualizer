@@ -8,6 +8,7 @@
   --spoilboard-3d: #9c8b70;
   --stock-3d: #e2cfae;
   --stock-cut-3d: #b89468;
+  --chip-3d: #ecd9b0;
   --traversed-3d: #d97706;
   --current-move: #e11d48;
 
@@ -155,6 +156,7 @@
     --spoilboard-3d: #6b5d48;
     --stock-3d: #b39c78;
     --stock-cut-3d: #7d6446;
+    --chip-3d: #d9c08e;
     --traversed-3d: #fbbf24;
     --current-move: #fb7185;
   }

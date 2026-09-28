@@ -107,6 +107,13 @@ npm run check        # lint + build + test: run before every commit
     it, taking the loaded library as a parameter so it is testable in Node).
     `cuttingSegments` merges straight runs within the planner's arc
     tolerance; jobs over `MAX_EXACT_STROKES` are skipped.
+  - `chips.ts`: wood chips as a particle pool with ballistic physics in
+    wall-clock seconds (speeds in m/s, scaled by units per meter). The
+    flute direction sets the share thrown up and out (`upShare`: up-cut
+    and a compression bit within its up-cut length throw most up; down-cut
+    and deeper compression cuts keep most in the cut); the clockwise
+    spindle flings them from the side behind the bit. `stock.removed`
+    (height drops summed) paces how many are thrown.
   - `camera.ts`: view presets, `framePose` (fits a box from a direction),
     `jobBounds`, ortho sizing. Camera up is always +Z; the top view leans a
     hair towards −Y so OrbitControls keeps an azimuth.
@@ -149,6 +156,9 @@ npm run check        # lint + build + test: run before every commit
   into a few buffers and uploads only the tiles a cut touched. Never rebuild
   the stock geometry during playback (only a checkpoint restore redraws it). Layers only toggle
   `visible`. A second (orthographic) camera is swapped in for Ortho.
+  While playing, each simulation slice throws chips for the material it
+  removed (`chipView.ts`, an instanced mesh with its own animation frames
+  while chips are alive; none while catching up after a seek).
   At the end of playback it shows the exact part from `useExactCut` (a
   Web Worker, `src/workers/exactCut.worker.ts`, restarted when the job
   changes) instead of the stock, and skips simulating the stock there.

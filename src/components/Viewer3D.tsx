@@ -20,7 +20,7 @@ import { kindLayer } from '../sim/layers';
 import { bitProfile, kindCounts, moveLineBuffers, pathBuffer } from '../sim/sceneData';
 import type { MoveKind } from '../sim/sceneData';
 import type { DirtyRect, Stock } from '../sim/stock';
-import { stockFromGrid, stockGrid } from '../sim/stock';
+import { stockFromGrid, stockGrid, surfaceHeight } from '../sim/stock';
 import type { Rgb } from '../sim/stockMesh';
 import type { CutTarget } from '../sim/stockSim';
 import { StockSimulator } from '../sim/stockSim';
@@ -31,6 +31,8 @@ import type { Move } from '../toolpath/moves';
 import type { Timeline, TimelineSample } from '../toolpath/timeline';
 import { ignoreShortcut } from './keyboard';
 import { StockView } from './stockView';
+import { ChipView } from './chipView';
+import { chipsForVolume } from '../sim/chips';
 import { useExactCut } from './useExactCut';
 import './Workspace.css';
 import './Viewer3D.css';
@@ -52,6 +54,8 @@ type Viewer3DProps = {
   stepping: boolean;
   /** True when playback is at the end of the job, where the exact finished part is shown. */
   atEnd: boolean;
+  /** True while playback runs; chips are thrown only then. */
+  playing: boolean;
 };
 
 /** Theme colors read from CSS custom properties on the workspace element. */
@@ -64,6 +68,7 @@ type Palette = {
   spoilboard: string;
   stock: string;
   stockCut: string;
+  chip: string;
   bit: string;
   traversed: string;
   current: string;
@@ -75,6 +80,8 @@ const SPOILBOARD_IN = 0.75;
 const BIT_LENGTH_DIAMETERS = 4;
 /** Stock simulation time per animation frame, in ms; the rest of the frame is left for rendering. */
 const SIM_FRAME_MS = 6;
+/** Most chips thrown in one frame, so fast playback does not flood the view. */
+const MAX_CHIPS_PER_FRAME = 40;
 /** Work units (grid points) per `advanceTo` call, so the frame budget is checked often. */
 const SIM_CHUNK = 50_000;
 
@@ -99,6 +106,7 @@ const MENU_LAYERS: { key: LayerKey; label: string }[] = [
   { key: 'sheet', label: 'Sheet and spoilboard' },
   { key: 'untraversed', label: 'Path not played yet' },
   { key: 'axes', label: 'Axes' },
+  { key: 'chips', label: 'Wood chips' },
 ];
 
 /** True when the browser can create a WebGL context (it may be disabled or unsupported). */
@@ -126,6 +134,7 @@ function readPalette(el: HTMLElement): Palette {
     spoilboard: v('--spoilboard-3d', '#9c8b70'),
     stock: v('--stock-3d', '#e2cfae'),
     stockCut: v('--stock-cut-3d', '#b89468'),
+    chip: v('--chip-3d', '#ecd9b0'),
     bit: v('--text', '#6b6375'),
     traversed: v('--traversed-3d', '#d97706'),
     current: v('--current-move', '#e11d48'),
@@ -209,6 +218,7 @@ type SceneState = {
   stockGroup: THREE.Group;
   /** Holds the exact finished part, shown instead of the stock at the end. */
   exactGroup: THREE.Group;
+  chips: ChipView;
   bit: THREE.Mesh;
   /** The played part of the current block, from its start to the bit. */
   current: Line;
@@ -237,6 +247,7 @@ export default function Viewer3D({
   playbackBar,
   stepping,
   atEnd,
+  playing,
 }: Viewer3DProps) {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -316,6 +327,9 @@ export default function Viewer3D({
       render();
     };
     const observer = new ResizeObserver(resize);
+    // Chips animate on their own frames and ask for a redraw on each.
+    const chips = new ChipView(render);
+    scene.add(chips.mesh);
 
     const state: SceneState = {
       renderer,
@@ -328,6 +342,7 @@ export default function Viewer3D({
       parts: emptyParts(),
       stockGroup,
       exactGroup,
+      chips,
       bit,
       current,
       moveOverlay,
@@ -338,6 +353,7 @@ export default function Viewer3D({
     resize();
     return () => {
       sceneRef.current = null;
+      chips.dispose();
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
@@ -602,6 +618,30 @@ export default function Viewer3D({
   /** Uploads the tiles `rect` touched (everything after a checkpoint restore). */
   const flushStock = useCallback((st: StockState, rect: DirtyRect | null) => st.view.update(rect), []);
 
+  const playingRef = useRef(playing);
+  // Fractions of a chip carried to the next frame, so slow cuts still throw some.
+  const chipCarry = useRef(0);
+  const flute = params.bit.flute;
+  const bitDiameter = params.bit.diameter;
+  const fluteRef = useRef(flute);
+  const bitDiameterRef = useRef(bitDiameter);
+  const throwChips = useCallback(
+    (s: SceneState, volume: number, target: CutTarget) => {
+      if (volume <= 0) return;
+      const wanted = chipsForVolume(volume, bitDiameterRef.current) + chipCarry.current;
+      const n = Math.min(MAX_CHIPS_PER_FRAME, Math.floor(wanted));
+      chipCarry.current = n === MAX_CHIPS_PER_FRAME ? 0 : wanted - n;
+      const u = timeline.blocks[Math.max(0, target.block)]?.u ?? { x: 0, y: 0, z: 0 };
+      const xy = Math.hypot(u.x, u.y);
+      s.chips.emit(n, {
+        tip: target.position,
+        travel: xy > 1e-6 ? { x: u.x / xy, y: u.y / xy } : { x: 0, y: 0 },
+        flute: fluteRef.current,
+      });
+    },
+    [timeline]
+  );
+
   const simulateSlice = useCallback(
     function slice() {
       simFrameRef.current = 0;
@@ -614,11 +654,20 @@ export default function Viewer3D({
         return;
       }
       const start = performance.now();
+      const removedBefore = st.stock.removed;
+      let restored = false;
       let result;
       do {
         result = st.sim.advanceTo(target, SIM_CHUNK);
+        const d = result.dirty;
+        if (d && d.i0 === 0 && d.j0 === 0 && d.i1 === st.stock.nx - 1 && d.j1 === st.stock.ny - 1) restored = true;
         flushStock(st, result.dirty);
       } while (!result.done && performance.now() - start < SIM_FRAME_MS);
+      // Chips for what this frame of playback cut; not for catching up after a seek.
+      if (playingRef.current && !restored && layersRef.current.chips) {
+        const volume = (st.stock.removed - removedBefore) * st.stock.dx * st.stock.dy;
+        throwChips(s, volume, target);
+      }
       s.render();
       if (result.done) {
         setSimProgress(null);
@@ -627,7 +676,7 @@ export default function Viewer3D({
         simFrameRef.current = requestAnimationFrame(slice);
       }
     },
-    [flushStock]
+    [flushStock, throwChips]
   );
 
   /** Catches the stock up with `targetRef` now, unless a slice is already queued for this frame. */
@@ -662,6 +711,43 @@ export default function Viewer3D({
       if (sceneRef.current === s) s.render();
     };
   }, [timeline, grid, sheetX, sheetY, thickness, bitParams, stockColors, simulate]);
+
+  useEffect(() => {
+    playingRef.current = playing;
+    fluteRef.current = flute;
+    bitDiameterRef.current = bitDiameter;
+  }, [playing, flute, bitDiameter]);
+
+  // The chips' world follows the job; hiding them clears them.
+  const unitsPerMeter = params.units === 'mm' ? 1000 : 1000 / 25.4;
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    s.chips.setWorld({
+      unitsPerMeter,
+      // The live stock, so chips settle into grooves already cut; the flat
+      // sheet top while there is none yet.
+      surfaceAt: (x, y) => {
+        const st = stockRef.current;
+        if (st) return surfaceHeight(st.stock, x, y);
+        return x >= 0 && y >= 0 && x <= sheetX && y <= sheetY ? 0 : null;
+      },
+      lowest: -thickness - SPOILBOARD_IN * unitFactor('in', params.units) * 4,
+      bitDiameter,
+    });
+  }, [timeline, unitsPerMeter, sheetX, sheetY, thickness, bitDiameter, params.units]);
+
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    s.chips.mesh.visible = layers.chips;
+    if (!layers.chips) s.chips.clear();
+  }, [layers.chips]);
+
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (s && palette) s.chips.setColor(palette.chip);
+  }, [palette]);
 
   // Recolor the stock for a new color scheme.
   useEffect(() => {

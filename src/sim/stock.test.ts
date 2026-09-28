@@ -21,6 +21,7 @@ import {
   restoreTiles,
   snapshotTiles,
   stockGrid,
+  surfaceHeight,
   takeDirtyTiles,
   tipOffset,
   touchedTiles,
@@ -167,6 +168,27 @@ describe('tiles', () => {
     cutSegment(stock, p(x, 15, 1), p(x, 15, -2), flat);
     const t = (Math.round(15 / stock.dy) >> 6) * stock.tx;
     expect(takeDirtyTiles(stock).sort((a, b) => a - b)).toEqual([t, t + 1]);
+  });
+
+  it('reads the surface height at a world point, null off the sheet', () => {
+    const stock = createStock(sheet, flat);
+    cutSegment(stock, p(20, 30, -3), p(80, 30, -3), flat);
+    expect(surfaceHeight(stock, 50, 30)).toBe(-3);
+    expect(surfaceHeight(stock, 50, 40)).toBe(0);
+    expect(surfaceHeight(stock, -1, 30)).toBeNull();
+    expect(surfaceHeight(stock, 50, 60.5)).toBeNull();
+  });
+
+  it('counts the material removed, once', () => {
+    const stock = createStock(sheet, flat);
+    cutSegment(stock, p(20, 30, -3), p(80, 30, -3), flat);
+    const volume = stock.removed * stock.dx * stock.dy;
+    const slot = 60 * 6 * 3 + Math.PI * 9 * 3;
+    // Each grid point stands for a whole cell, so cells along the slot edge count in full.
+    expect(Math.abs(volume - slot) / slot).toBeLessThan(0.05);
+    // Cutting the same slot again removes nothing more.
+    cutSegment(stock, p(20, 30, -3), p(80, 30, -3), flat);
+    expect(stock.removed * stock.dx * stock.dy).toBe(volume);
   });
 
   it('shares tiles with a snapshot and copies them before writing', () => {
