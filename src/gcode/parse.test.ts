@@ -79,6 +79,11 @@ describe('parseGcode: kinds', () => {
     expect(moves.map((m) => m.kind)).toEqual(['rapid', 'rapid', 'plunge', 'feed', 'feed', 'feed', 'retract', 'rapid']);
   });
 
+  it('carries the spindle speed on feeds and plunges once an S word sets it', () => {
+    const { moves } = parse(['G21', 'G1 X1 F100', 'S12000', 'G0 X2', 'G1 Z-1', 'G1 X3 S9000', 'S0 G1 X4']);
+    expect(moves.map((m) => m.spindleRpm)).toEqual([undefined, undefined, 12000, 9000, 0]);
+  });
+
   it('carries the feed rate on feeds and plunges only', () => {
     const { moves } = parse(['G21', 'G0 X1', 'G1 Z-1 F50', 'G1 X2 F300', 'G0 Z5']);
     expect(moves.map((m) => m.feedRate)).toEqual([undefined, 50, 300, undefined]);
@@ -245,6 +250,7 @@ describe('parseGcode: diagnostics', () => {
     ['a full circle by R', ['G21 F100', 'G0 X1', 'G2 X1 Y0 Z4 R5'], 'arc-full-circle-r'],
     ['an arc outside the XY plane', ['G21 F100 G18', 'G2 X10 I5'], 'arc-plane'],
     ['a zero feed rate', ['G21 F0'], 'invalid-feed'],
+    ['a negative spindle speed', ['G21 S-100'], 'invalid-spindle'],
   ])('reports %s as an error on its line', (_, lines, code) => {
     const found = parse(lines).diagnostics.filter((d) => d.severity === 'error');
     expect(found).toEqual([expect.objectContaining({ line: lines.length - 1, code })]);
@@ -272,7 +278,8 @@ describe('parseGcode: diagnostics', () => {
   it('warns about each unsupported word and still runs the motion', () => {
     const program = parse(['G21', 'M3 S12000 T1 G54 G1 X5 F100']);
     const warnings = program.diagnostics.filter((d) => d.code === 'unsupported-word');
-    expect(warnings.map((d) => d.message.split(' ')[0])).toEqual(['M3', 'S12000', 'T1', 'G54']);
+    expect(warnings.map((d) => d.message.split(' ')[0])).toEqual(['M3', 'T1', 'G54']);
+    expect(program.moves[0].spindleRpm).toBe(12000);
     expect(warnings.every((d) => d.severity === 'warning' && d.line === 1)).toBe(true);
     expect(program.moves).toHaveLength(1);
   });

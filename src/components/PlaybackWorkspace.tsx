@@ -10,6 +10,7 @@ import type { MachineParams } from '../machine/params';
 import { usePlayback } from '../state/usePlayback';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import type { Move } from '../toolpath/moves';
+import { chipLoad, chipsPerSecond, cutConditions, rateChipLoad } from '../toolpath/chipLoad';
 import { diagnosticTicks } from '../toolpath/scrubber';
 import { stopTimes } from '../toolpath/stops';
 import {
@@ -181,6 +182,20 @@ export function PlaybackWorkspace({ view, viewToggle, moves, params, estimate, p
   }, [toggle, seek, step, stepping, timeline, time, scaleSpeed]);
 
   const onStep = stepping ? step : undefined;
+  // Chip load of the move being played, when it cuts.
+  const playedMove = sample.moveIndex >= 0 ? moves[sample.moveIndex] : undefined;
+  const conditions = playedMove ? cutConditions(playedMove, params) : null;
+  const flutes = params.bit.fluteCount;
+  const load = conditions ? chipLoad(conditions.feedRate, conditions.rpm, flutes) : null;
+  const chipLoadInfo = conditions
+    ? {
+        load,
+        // The band is for side cutting; plunging normally runs lighter, so it is not rated.
+        rating: load === null || playedMove?.kind === 'plunge' ? null : rateChipLoad(load, params.bit.diameter),
+        perSecond: chipsPerSecond(conditions.rpm, flutes),
+      }
+    : null;
+
   const playbackBar = (
     <PlaybackBar
       playback={playback}
@@ -190,6 +205,7 @@ export function PlaybackWorkspace({ view, viewToggle, moves, params, estimate, p
       ticks={ticks}
       breakpoints={breakpointTimes}
       onStep={onStep}
+      chipLoad={chipLoadInfo}
     />
   );
 

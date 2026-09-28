@@ -19,9 +19,15 @@ describe('public/samples/demo.nc', () => {
     expect(program.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
   });
 
-  it('reports only its spindle and program-end words as unsupported', () => {
+  it('reports only its spindle on/off and program-end words as unsupported', () => {
     const words = program.diagnostics.map((d) => d.message.split(' ')[0]);
-    expect(words).toEqual(['M3', 'S18000', 'M5', 'M30']);
+    expect(words).toEqual(['M3', 'M5', 'M30']);
+  });
+
+  it('cuts at its S18000 spindle speed', () => {
+    const cuts = program.moves.filter((m) => m.kind === 'feed' || m.kind === 'plunge');
+    expect(cuts.length).toBeGreaterThan(0);
+    expect(cuts.every((m) => m.spindleRpm === 18000)).toBe(true);
   });
 
   it('flags exactly the deliberate slot off the sheet', () => {

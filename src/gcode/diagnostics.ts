@@ -13,6 +13,7 @@ export type DiagnosticCode =
   | 'unused-word'
   | 'missing-feed'
   | 'invalid-feed'
+  | 'invalid-spindle'
   | 'arc-missing-center'
   | 'arc-zero-radius'
   | 'arc-radius-mismatch'

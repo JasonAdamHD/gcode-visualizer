@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FluteDirection } from '../machine/params';
 import type { ChipSource, SurfaceAt } from './chips';
-import { chipAngle, chipScale, chipsForVolume, createChips, emitChips, launchChip, stepChips, upShare } from './chips';
+import { chipAngle, chipScale, createChips, emitChips, launchChip, stepChips, upShare } from './chips';
 
 /** Deterministic pseudo-random numbers in [0, 1). */
 function random(seed: number) {
@@ -21,6 +21,7 @@ const source = (flute: FluteDirection, depth = 3, travel = { x: 1, y: 0 }): Chip
   tip: { x: 50, y: 30, z: -depth },
   travel,
   bitDiameter: 6,
+  chip: { length: 3, width: 3, thickness: 0.15 },
   flute,
   unitsPerMeter: MM,
 });
@@ -94,6 +95,19 @@ describe('emitChips and stepChips', () => {
     return x >= 20 && x <= 80 && Math.abs(y - 30) <= 3 ? -3 : 0;
   };
 
+  it('sizes each chip from the chip being cut, within ±30 %', () => {
+    const chips = createChips(100);
+    emitChips(chips, 100, source(up), random(6));
+    for (let c = 0; c < chips.count; c++) {
+      const [l, w, t] = chips.dims.slice(c * 3, c * 3 + 3);
+      expect(l / 3).toBeGreaterThanOrEqual(0.7 - 1e-6);
+      expect(l / 3).toBeLessThanOrEqual(1.3 + 1e-6);
+      // One factor for the whole chip, so its proportions hold.
+      expect(w / l).toBeCloseTo(1, 5);
+      expect(t / l).toBeCloseTo(0.05, 5);
+    }
+  });
+
   it('adds chips up to the capacity', () => {
     const chips = createChips(10);
     expect(emitChips(chips, 6, source(up), random(1))).toBe(6);
@@ -162,12 +176,5 @@ describe('emitChips and stepChips', () => {
     expect(chipScale(chips, 0)).toBe(1);
     chips.age[0] = chips.life[0] * 0.95;
     expect(chipScale(chips, 0)).toBeCloseTo(0.2, 5);
-  });
-});
-
-describe('chipsForVolume', () => {
-  it('throws one chip per 2 % of the bit diameter cubed', () => {
-    expect(chipsForVolume(0.02 * 216, 6)).toBeCloseTo(1, 12);
-    expect(chipsForVolume(0, 6)).toBe(0);
   });
 });

@@ -42,7 +42,10 @@ export type MachineParams = {
   version: 2;
   units: Units;
   sheet: { x: number; y: number; thickness: number };
-  bit: { diameter: number; shape: BitShape; flute: FluteDirection };
+  /** `fluteCount`: cutting edges on the bit, a whole number from 1 to MAX_FLUTES. */
+  bit: { diameter: number; shape: BitShape; flute: FluteDirection; fluteCount: number };
+  /** Spindle speed in RPM, > 0; a program's S words override it (like F for the feed rate). */
+  spindleRpm: number;
   /** Units per minute, XY cutting moves. */
   feedRate: number;
   /** Units per minute, Z moves. */
@@ -71,6 +74,8 @@ export type FieldKey =
   | 'bit.diameter'
   | 'bit.includedAngleDeg'
   | 'bit.upcutLength'
+  | 'bit.fluteCount'
+  | 'spindleRpm'
   | 'feedRate'
   | 'plungeRate'
   | 'spoilboardPenetration'
@@ -83,12 +88,16 @@ export type FieldKey =
 
 export type ValidationErrors = Partial<Record<FieldKey, string>>;
 
+/** Most flutes a bit may have. */
+export const MAX_FLUTES = 8;
+
 /** Default job in inches: a 4 × 8 ft sheet of 3/4" stock and a 1/4" flat end mill. */
 export const DEFAULT_PARAMS: MachineParams = {
   version: 2,
   units: 'in',
   sheet: { x: 96, y: 48, thickness: 0.75 },
-  bit: { diameter: 0.25, shape: { kind: 'flat' }, flute: { kind: 'up' } },
+  bit: { diameter: 0.25, shape: { kind: 'flat' }, flute: { kind: 'up' }, fluteCount: 2 },
+  spindleRpm: 18000,
   feedRate: 200,
   plungeRate: 50,
   spoilboardPenetration: 0.01,
@@ -110,7 +119,7 @@ export function unitFactor(from: Units, to: Units): number {
 
 /**
  * Converts every length, rate and acceleration in `params` to `to` units,
- * so the physical job is unchanged. Angles and bit and flute kinds are left alone. Values are not
+ * so the physical job is unchanged. Angles, bit and flute kinds, flute count and spindle speed are left alone. Values are not
  * rounded (round only for display). Returns `params` itself if the units
  * already match.
  */
@@ -130,7 +139,9 @@ export function convertParams(params: MachineParams, to: Units): MachineParams {
       diameter: params.bit.diameter * f,
       shape: params.bit.shape,
       flute: flute.kind === 'compression' ? { kind: 'compression', upcutLength: flute.upcutLength * f } : flute,
+      fluteCount: params.bit.fluteCount,
     },
+    spindleRpm: params.spindleRpm,
     feedRate: params.feedRate * f,
     plungeRate: params.plungeRate * f,
     spoilboardPenetration: params.spoilboardPenetration * f,
@@ -162,7 +173,8 @@ const isNum = (v: number) => typeof v === 'number' && Number.isFinite(v);
  * Field-level hard errors (empty object when valid). Lengths, rates and
  * acceleration must be positive, spoilboard penetration and junction
  * deviation non-negative, a V-bit's included angle strictly between 0°
- * and 180°, and a compression bit's up-cut length positive.
+ * and 180°, a compression bit's up-cut length and the spindle speed
+ * positive, and the flute count a whole number from 1 to `MAX_FLUTES`.
  */
 export function validateParams(params: MachineParams): ValidationErrors {
   const errors: ValidationErrors = {};
@@ -190,6 +202,9 @@ export function validateParams(params: MachineParams): ValidationErrors {
     if (!isNum(a) || a <= 0 || a >= 180) errors['bit.includedAngleDeg'] = 'Must be between 0° and 180°';
   }
   if (params.bit.flute.kind === 'compression') positive('bit.upcutLength', params.bit.flute.upcutLength);
+  const n = params.bit.fluteCount;
+  if (!Number.isInteger(n) || n < 1 || n > MAX_FLUTES) errors['bit.fluteCount'] = `Must be a whole number from 1 to ${MAX_FLUTES}`;
+  positive('spindleRpm', params.spindleRpm);
   return errors;
 }
 
@@ -210,8 +225,9 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
  *
  * Version 1 (before the motion fields existed) is migrated: the missing
  * fields take `DEFAULT_PARAMS` converted into the file's units. Other
- * versions are rejected, and so is any file without `bit.flute` (added
- * before the app had users, so it has no migration).
+ * versions are rejected, and so is any file without `bit.flute`,
+ * `bit.fluteCount` or `spindleRpm` (added before the app had users, so
+ * they have no migration).
  */
 export function parseParams(text: string): ParseResult {
   let raw: unknown;
@@ -246,6 +262,8 @@ export function parseParams(text: string): ParseResult {
     ['sheet.y', sheet.y],
     ['sheet.thickness', sheet.thickness],
     ['bit.diameter', bit.diameter],
+    ['bit.fluteCount', bit.fluteCount],
+    ['spindleRpm', raw.spindleRpm],
     ['feedRate', raw.feedRate],
     ['plungeRate', raw.plungeRate],
     ['spoilboardPenetration', raw.spoilboardPenetration],
@@ -294,7 +312,8 @@ export function parseParams(text: string): ParseResult {
     version: 2,
     units,
     sheet: { x: sheet.x as number, y: sheet.y as number, thickness: sheet.thickness as number },
-    bit: { diameter: bit.diameter as number, shape, flute },
+    bit: { diameter: bit.diameter as number, shape, flute, fluteCount: bit.fluteCount as number },
+    spindleRpm: raw.spindleRpm as number,
     feedRate: raw.feedRate as number,
     plungeRate: raw.plungeRate as number,
     spoilboardPenetration: raw.spoilboardPenetration as number,

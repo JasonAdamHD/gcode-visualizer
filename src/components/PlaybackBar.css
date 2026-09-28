@@ -61,3 +61,8 @@
 .playback-readout {
   color: var(--text);
 }
+
+.chip-load-low,
+.chip-load-high {
+  color: var(--severity-warning);
+}

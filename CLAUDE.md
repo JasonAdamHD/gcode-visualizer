@@ -48,7 +48,9 @@ npm run check        # lint + build + test: run before every commit
   any future shape change. `BitShape` is a discriminated union so a custom
   drawn profile can be added later. `bit.flute` (`FluteDirection`: up,
   down, or compression with an `upcutLength`) is separate from the tip
-  shape; it only affects how chips are shown, never the cut.
+  shape; it only affects how chips are shown, never the cut. `bit.fluteCount`
+  and `spindleRpm` give the chip load (a program's S words override the
+  spindle speed, as F does the feed).
 - `src/toolpath/` turns the drawing into machine motion (pure, tested):
   - `offset.ts`: cutter compensation. The **only** module that imports
     `cavalier-contours-js` (pinned exact); never offset paths by hand.
@@ -73,6 +75,11 @@ npm run check        # lint + build + test: run before every commit
     speed at any time. Its total must equal the estimate (tested).
     `moveBlockStarts`, `adjacentMoveTime` and `adjacentBlockTime` support
     step-through.
+  - `chipLoad.ts`: chip load (`feed ÷ (rpm × flutes)`), its rating against a
+    rule-of-thumb band for wood (side cutting only), each move's cutting
+    feed and RPM (`cutConditions`), and the chips cut over a stretch of
+    path: one per tooth pass, as thick as the chip load and as wide as the
+    depth engaged.
   - `stops.ts`: breakpoints as sorted stop times; `advanceClock` is one
     frame of the playback clock, pausing exactly on the first stop it
     crosses in `(t0, t1]` (so it never re-stops where it paused).
@@ -112,8 +119,9 @@ npm run check        # lint + build + test: run before every commit
     flute direction sets the share thrown up and out (`upShare`: up-cut
     and a compression bit within its up-cut length throw most up; down-cut
     and deeper compression cuts keep most in the cut); the clockwise
-    spindle flings them from the side behind the bit. `stock.removed`
-    (height drops summed) paces how many are thrown.
+    spindle flings them from the side behind the bit. Each chip has the
+    size `chipsCut` gives; `stock.removed` (height drops summed) is the
+    volume that decides the engaged depth, and so whether anything was cut.
   - `camera.ts`: view presets, `framePose` (fits a box from a direction),
     `jobBounds`, ortho sizing. Camera up is always +Z; the top view leans a
     hair towards −Y so OrbitControls keeps an azimuth.
@@ -156,8 +164,8 @@ npm run check        # lint + build + test: run before every commit
   into a few buffers and uploads only the tiles a cut touched. Never rebuild
   the stock geometry during playback (only a checkpoint restore redraws it). Layers only toggle
   `visible`. A second (orthographic) camera is swapped in for Ortho.
-  While playing, each simulation slice throws chips for the material it
-  removed (`chipView.ts`, an instanced mesh with its own animation frames
+  While playing, each simulation slice throws the chips cut over the
+  distance the bit moved (one per tooth pass, capped per frame) (`chipView.ts`, an instanced mesh with its own animation frames
   while chips are alive; none while catching up after a seek).
   At the end of playback it shows the exact part from `useExactCut` (a
   Web Worker, `src/workers/exactCut.worker.ts`, restarted when the job
@@ -182,7 +190,7 @@ npm run check        # lint + build + test: run before every commit
     meaning. Kept separate from the interpreter so a controller dialect
     layer can sit between them later.
   - `parse.ts`: `parseGcode(text, start)`, the modal interpreter (GRBL
-    semantics: G0–G3 in XY, G17, G20/G21, G90/G91, F) producing `Move[]`
+    semantics: G0–G3 in XY, G17, G20/G21, G90/G91, F, S) producing `Move[]`
     and diagnostics. The first G20/G21 sets the program's units (mm if
     none); arcs over 180° are split in two; every other word is reported,
     never silently ignored. `sourceLines` numbers lines the same way.

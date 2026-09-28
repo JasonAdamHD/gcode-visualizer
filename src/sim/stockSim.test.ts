@@ -18,7 +18,7 @@ const params: MachineParams = {
   ...DEFAULT_PARAMS,
   units: 'mm',
   sheet: { x: 60, y: 40, thickness: 10 },
-  bit: { diameter: 6, shape: { kind: 'ball' }, flute: { kind: 'up' } },
+  bit: { diameter: 6, shape: { kind: 'ball' }, flute: { kind: 'up' }, fluteCount: 2 },
   feedRate: 1000,
   plungeRate: 300,
   rapidRateXY: 3000,

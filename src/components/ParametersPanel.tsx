@@ -274,7 +274,7 @@ export function ParametersPanel({
           )}
         <div className="number-field">
           <label htmlFor="bit-flute" title="Which way the flutes lift chips; shown by the chips in the 3D view">
-            Flutes
+            Flute direction
           </label>
           <select
             id="bit-flute"
@@ -298,6 +298,14 @@ export function ParametersPanel({
             ...p,
             bit: { ...p.bit, flute: { kind: 'compression', upcutLength } },
           }))}
+        {field(
+          'bit.fluteCount',
+          'Flute count',
+          params.bit.fluteCount,
+          (p, fluteCount) => ({ ...p, bit: { ...p.bit, fluteCount } }),
+          '',
+          0
+        )}
       </fieldset>
 
       <fieldset>
@@ -306,9 +314,11 @@ export function ParametersPanel({
         {field('plungeRate', 'Plunge rate', params.plungeRate, (p, plungeRate) => ({ ...p, plungeRate }), rate)}
         {field('rapidRateXY', 'Rapid XY', params.rapidRateXY, (p, rapidRateXY) => ({ ...p, rapidRateXY }), rate)}
         {field('rapidRateZ', 'Rapid Z', params.rapidRateZ, (p, rapidRateZ) => ({ ...p, rapidRateZ }), rate)}
+        {field('spindleRpm', 'Spindle speed', params.spindleRpm, (p, spindleRpm) => ({ ...p, spindleRpm }), 'RPM', 0)}
         {program && (
           <p className="derived note">
-            The program's F words set its feed and plunge rates; these two apply only to cuts before the first F.
+            The program's F and S words set its feed rates and spindle speed; these apply only to cuts before the first
+            F or S.
           </p>
         )}
       </fieldset>

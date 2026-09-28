@@ -28,6 +28,8 @@ export type Move = {
   sourceLine?: number;
   /** Programmed feed rate in units/min (an imported F word); overrides the params' feed or plunge rate. */
   feedRate?: number;
+  /** Programmed spindle speed in RPM (an imported S word; 0 = stopped); overrides the params' spindle speed. */
+  spindleRpm?: number;
 };
 
 /** Height above the current material surface where a rapid lower stops and the plunge starts, in inches. */

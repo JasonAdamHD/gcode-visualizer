@@ -18,6 +18,7 @@
 // (sin θ, −cos θ) and flings chips that way; chips leave on the side
 // behind the bit, where the material is already cut.
 import type { FluteDirection } from '../machine/params';
+import type { ChipSize } from '../toolpath/chipLoad';
 import type { Point3 } from '../toolpath/moves';
 
 /** Standard gravity, m/s². */
@@ -57,8 +58,8 @@ export type Chips = {
   spin: Float32Array;
   age: Float32Array;
   life: Float32Array;
-  /** Chip size as a fraction of the bit diameter. */
-  size: Float32Array;
+  /** Chip size `[length, width, thickness]` per chip, world units. */
+  dims: Float32Array;
   landed: Uint8Array;
 };
 
@@ -72,7 +73,7 @@ export function createChips(capacity: number): Chips {
     spin: new Float32Array(capacity),
     age: new Float32Array(capacity),
     life: new Float32Array(capacity),
-    size: new Float32Array(capacity),
+    dims: new Float32Array(capacity * 3),
     landed: new Uint8Array(capacity),
   };
 }
@@ -84,6 +85,8 @@ export type ChipSource = {
   /** Direction of travel in XY (unit length), or zero for a plunge. */
   travel: { x: number; y: number };
   bitDiameter: number;
+  /** The size of the chips being cut (see `chipsCut`); each chip varies by ±30 %. */
+  chip: ChipSize;
   flute: FluteDirection;
   /** World units per meter: speeds and gravity are given in meters. */
   unitsPerMeter: number;
@@ -172,7 +175,8 @@ export function emitChips(chips: Chips, n: number, source: ChipSource, rand: Ran
     chips.spin[c] = (4 + 16 * rand()) * (rand() < 0.5 ? -1 : 1);
     chips.age[c] = 0;
     chips.life[c] = between(LIFE, rand);
-    chips.size[c] = 0.15 + 0.2 * rand();
+    const vary = 0.7 + 0.6 * rand();
+    chips.dims.set([source.chip.length * vary, source.chip.width * vary, source.chip.thickness * vary], c * 3);
     chips.landed[c] = 0;
   }
   return room;
@@ -234,7 +238,7 @@ function removeChip(chips: Chips, c: number) {
   chips.spin[c] = chips.spin[last];
   chips.age[c] = chips.age[last];
   chips.life[c] = chips.life[last];
-  chips.size[c] = chips.size[last];
+  chips.dims.copyWithin(c * 3, last * 3, last * 3 + 3);
   chips.landed[c] = chips.landed[last];
 }
 
@@ -247,9 +251,4 @@ export function chipAngle(chips: Chips, c: number): number {
 export function chipScale(chips: Chips, c: number): number {
   const left = (chips.life[c] - chips.age[c]) / (chips.life[c] * FADE);
   return Math.max(0, Math.min(1, left));
-}
-
-/** Chips to throw for `volume` (world units³) of material cut by a bit of `diameter`: one per 2 % of d³. */
-export function chipsForVolume(volume: number, diameter: number): number {
-  return volume / (0.02 * diameter ** 3);
 }
