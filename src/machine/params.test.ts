@@ -16,7 +16,14 @@ import {
   validateParams,
 } from './params';
 
-const vbit: MachineParams = { ...DEFAULT_PARAMS, bit: { diameter: 0.5, shape: { kind: 'vbit', includedAngleDeg: 60 } } };
+const vbit: MachineParams = {
+  ...DEFAULT_PARAMS,
+  bit: { diameter: 0.5, shape: { kind: 'vbit', includedAngleDeg: 60 }, flute: { kind: 'down' } },
+};
+const compression: MachineParams = {
+  ...DEFAULT_PARAMS,
+  bit: { diameter: 0.25, shape: { kind: 'flat' }, flute: { kind: 'compression', upcutLength: 0.125 } },
+};
 
 /** Serialized DEFAULT_PARAMS with `mutate` applied to a deep copy. */
 const withRaw = (mutate: (raw: Record<string, any>) => void): string => {
@@ -55,6 +62,13 @@ describe('convertParams', () => {
     expect(mm.acceleration).toBeCloseTo(254);
     expect(mm.junctionDeviation).toBeCloseTo(0.0508);
     expect(mm.bit.shape).toEqual({ kind: 'vbit', includedAngleDeg: 60 });
+    expect(mm.bit.flute).toEqual({ kind: 'down' });
+  });
+
+  it("scales a compression bit's up-cut length", () => {
+    const mm = convertParams(compression, 'mm');
+    expect(mm.bit.flute).toEqual({ kind: 'compression', upcutLength: 3.175 });
+    expect(convertParams(mm, 'in').bit.flute).toEqual({ kind: 'compression', upcutLength: expect.closeTo(0.125, 12) });
   });
 
   it('round-trips in → mm → in within 1e-9', () => {
@@ -121,6 +135,14 @@ describe('validateParams', () => {
     ]);
   });
 
+  it("requires a compression bit's up-cut length to be positive", () => {
+    expect(validateParams(compression)).toEqual({});
+    for (const upcutLength of [0, -0.1, NaN]) {
+      const p: MachineParams = { ...compression, bit: { ...compression.bit, flute: { kind: 'compression', upcutLength } } };
+      expect(validateParams(p)).toHaveProperty(['bit.upcutLength']);
+    }
+  });
+
   it('requires a V-bit angle strictly between 0 and 180', () => {
     for (const angle of [0, 180, -10, 200]) {
       const p: MachineParams = { ...vbit, bit: { ...vbit.bit, shape: { kind: 'vbit', includedAngleDeg: angle } } };
@@ -131,7 +153,7 @@ describe('validateParams', () => {
 
 describe('serializeParams / parseParams', () => {
   it('round-trips', () => {
-    for (const p of [DEFAULT_PARAMS, vbit, convertParams(vbit, 'mm')]) {
+    for (const p of [DEFAULT_PARAMS, vbit, convertParams(vbit, 'mm'), compression, convertParams(compression, 'mm')]) {
       expect(parseParams(serializeParams(p))).toEqual({ ok: true, params: p });
     }
   });
@@ -178,6 +200,10 @@ describe('serializeParams / parseParams', () => {
     ['non-object', '[1, 2]'],
     ['null', 'null'],
     ['wrong version', withRaw((r) => (r.version = 3))],
+    ['missing the flute', withRaw((r) => delete r.bit.flute)],
+    ['unknown flute', withRaw((r) => (r.bit.flute = { kind: 'sideways' }))],
+    ['compression without up-cut length', withRaw((r) => (r.bit.flute = { kind: 'compression' }))],
+    ['non-positive up-cut length', withRaw((r) => (r.bit.flute = { kind: 'compression', upcutLength: 0 }))],
     ['v2 missing a motion field', withRaw((r) => delete r.acceleration)],
     ['negative junction deviation', withRaw((r) => (r.junctionDeviation = -1))],
     ['missing version', withRaw((r) => delete r.version)],
