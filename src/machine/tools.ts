@@ -162,6 +162,55 @@ export function paramsMatchTool(params: MachineParams, tool: Tool): boolean {
   );
 }
 
+/** What merging tools into a library did. */
+export type MergeResult = {
+  library: ToolLibrary;
+  added: number;
+  updated: number;
+  /** Tools whose number was missing or already taken, with the number they got. */
+  renumbered: { name: string; number: number }[];
+  /** Tools left out: an older copy of one already in the library, or no room. */
+  ignored: { name: string; reason: string }[];
+};
+
+/**
+ * Adds `incoming` tools to `base`. A tool with the same id as one in the
+ * library replaces it when it is at least as new (`updatedAt`), so
+ * importing a library again updates it instead of duplicating it. A tool
+ * with no number (0) or a number another tool has gets the lowest free
+ * number. The library never grows past `MAX_TOOLS`.
+ */
+export function mergeTools(base: ToolLibrary, incoming: readonly Tool[]): MergeResult {
+  const tools = [...base.tools];
+  const result: Omit<MergeResult, 'library'> = { added: 0, updated: 0, renumbered: [], ignored: [] };
+  for (const tool of incoming) {
+    const at = tools.findIndex((t) => t.id === tool.id);
+    if (at < 0 && tools.length >= MAX_TOOLS) {
+      result.ignored.push({ name: tool.name, reason: `the library is full (${MAX_TOOLS} tools)` });
+      continue;
+    }
+    if (at >= 0 && tool.updatedAt < tools[at].updatedAt) {
+      result.ignored.push({ name: tool.name, reason: 'the library has a newer copy' });
+      continue;
+    }
+    let number = tool.number;
+    const taken = (n: number) => tools.some((t, k) => t.number === n && k !== at);
+    if (!(number >= 1) || taken(number)) {
+      number = nextToolNumber({ version: 1, tools: at >= 0 ? tools.filter((_, k) => k !== at) : tools });
+      result.renumbered.push({ name: tool.name, number });
+    }
+    const merged = { ...tool, number };
+    if (at >= 0) {
+      tools[at] = merged;
+      result.updated++;
+    } else {
+      tools.push(merged);
+      result.added++;
+    }
+  }
+  return { library: { version: 1, tools }, ...result };
+}
+
 /** A one-line label: `T3 · 1/4" down-cut (0.25 in flat, 2 fl)`. */
 export function toolLabel(tool: Tool): string {
   const shape = tool.shape.kind === 'vbit' ? `${tool.shape.includedAngleDeg}° V` : tool.shape.kind;

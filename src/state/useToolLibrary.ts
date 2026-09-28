@@ -5,8 +5,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { MachineParams } from '../machine/params';
 import { DEFAULT_PARAMS } from '../machine/params';
-import type { Tool, ToolLibrary } from '../machine/tools';
-import { newToolId, nextToolNumber, parseLibrary, resolveActiveTool, serializeLibrary, toolFromParams } from '../machine/tools';
+import type { MergeResult, Tool, ToolLibrary } from '../machine/tools';
+import { mergeTools, newToolId, nextToolNumber, parseLibrary, resolveActiveTool, serializeLibrary, toolFromParams } from '../machine/tools';
 
 export const TOOLS_STORAGE_KEY = 'cnc-visualizer.tools';
 const ACTIVE_STORAGE_KEY = 'cnc-visualizer.activeTool';
@@ -41,6 +41,8 @@ export type ToolLibraryState = {
   /** Overwrites a tool with the params' current bit, feeds and spindle speed. */
   updateFromParams: (id: string, params: MachineParams) => void;
   remove: (id: string) => void;
+  /** Merges imported tools into the library (see `mergeTools`) and says what happened. */
+  importTools: (tools: readonly Tool[]) => MergeResult;
 };
 
 /**
@@ -100,6 +102,15 @@ export function useToolLibrary(): ToolLibraryState {
     });
   }, []);
 
+  const importTools = useCallback(
+    (tools: readonly Tool[]) => {
+      const result = mergeTools(library, tools);
+      setState((s) => ({ ...s, library: result.library }));
+      return result;
+    },
+    [library]
+  );
+
   const active = library.tools.find((t) => t.id === activeId) ?? null;
-  return { library, activeId, active, select, saveNew, edit, updateFromParams, remove };
+  return { library, activeId, active, select, saveNew, edit, updateFromParams, remove, importTools };
 }

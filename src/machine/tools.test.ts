@@ -7,6 +7,7 @@ import { DEFAULT_PARAMS, convertParams } from './params';
 import type { Tool, ToolLibrary } from './tools';
 import {
   applyTool,
+  mergeTools,
   nextToolNumber,
   resolveActiveTool,
   paramsMatchTool,
@@ -140,5 +141,43 @@ describe('serializeLibrary / parseLibrary', () => {
   ])('rejects %s', (_, text) => {
     const result = parseLibrary(text);
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('mergeTools', () => {
+  it('adds new tools and updates tools with the same id when at least as new', () => {
+    const newer = { ...vbit, name: 'V-bit, resharpened', updatedAt: 3000 };
+    const extra = { ...quarter, id: 'c', number: 5, name: 'New' };
+    const { library: merged, added, updated } = mergeTools(library, [newer, extra]);
+    expect(added).toBe(1);
+    expect(updated).toBe(1);
+    expect(merged.tools.map((t) => [t.number, t.name])).toEqual([
+      [1, '1/4" up-cut'],
+      [3, 'V-bit, resharpened'],
+      [5, 'New'],
+    ]);
+  });
+
+  it('ignores an older copy of a tool already in the library', () => {
+    const older = { ...vbit, name: 'Old', updatedAt: 1 };
+    const result = mergeTools(library, [older]);
+    expect(result.library.tools[1].name).toBe('90° V-bit');
+    expect(result.ignored).toEqual([{ name: 'Old', reason: 'the library has a newer copy' }]);
+  });
+
+  it('gives a tool with no number or a taken number the lowest free one', () => {
+    const clash = { ...quarter, id: 'd', number: 3, name: 'Clash' };
+    const none = { ...quarter, id: 'e', number: 0, name: 'None' };
+    const result = mergeTools(library, [clash, none]);
+    expect(result.renumbered).toEqual([
+      { name: 'Clash', number: 2 },
+      { name: 'None', number: 4 },
+    ]);
+    expect(validateLibrary(result.library)).toEqual([]);
+  });
+
+  it('keeps its own number when an update does not clash', () => {
+    const moved = { ...vbit, number: 9, updatedAt: 3000 };
+    expect(mergeTools(library, [moved]).library.tools[1].number).toBe(9);
   });
 });
