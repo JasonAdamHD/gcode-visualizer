@@ -4,8 +4,16 @@
 
 import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import type { BitKind, BitShape, FieldKey, MachineParams, Units } from '../machine/params';
-import { displayDecimals, formatNumber, parseParams, serializeParams, validateParams } from '../machine/params';
+import type { BitKind, BitShape, FieldKey, FluteDirection, FluteKind, MachineParams, Units } from '../machine/params';
+import {
+  DEFAULT_UPCUT_LENGTH_IN,
+  displayDecimals,
+  formatNumber,
+  parseParams,
+  serializeParams,
+  unitFactor,
+  validateParams,
+} from '../machine/params';
 import type { CutTimeEstimate } from '../toolpath/estimate';
 import { formatDuration } from '../toolpath/estimate';
 import { passDepths } from '../toolpath/moves';
@@ -52,6 +60,12 @@ const BIT_LABELS: Record<BitKind, string> = {
   vbit: 'V-bit',
 };
 
+const FLUTE_LABELS: Record<FluteKind, string> = {
+  up: 'Up-cut',
+  down: 'Down-cut',
+  compression: 'Compression',
+};
+
 const CLOSED_SIDES: [CutSide, string][] = [
   ['outside', 'Outside'],
   ['inside', 'Inside'],
@@ -69,6 +83,13 @@ const EXPORT_FILENAME = 'cnc-params.json';
 function shapeFor(kind: BitKind, current: BitShape): BitShape {
   if (kind === current.kind) return current;
   return kind === 'vbit' ? { kind: 'vbit', includedAngleDeg: DEFAULT_VBIT_ANGLE } : { kind };
+}
+
+function fluteFor(kind: FluteKind, current: FluteDirection, units: Units): FluteDirection {
+  if (kind === current.kind) return current;
+  return kind === 'compression'
+    ? { kind: 'compression', upcutLength: DEFAULT_UPCUT_LENGTH_IN * unitFactor('in', units) }
+    : { kind };
 }
 
 /** Sidebar for editing machine/job parameters. */
@@ -251,6 +272,32 @@ export function ParametersPanel({
             '°',
             2
           )}
+        <div className="number-field">
+          <label htmlFor="bit-flute" title="Which way the flutes lift chips; shown by the chips in the 3D view">
+            Flutes
+          </label>
+          <select
+            id="bit-flute"
+            value={params.bit.flute.kind}
+            onChange={(e) =>
+              update((p) => ({
+                ...p,
+                bit: { ...p.bit, flute: fluteFor(e.target.value as FluteKind, p.bit.flute, p.units) },
+              }))
+            }
+          >
+            {(Object.keys(FLUTE_LABELS) as FluteKind[]).map((kind) => (
+              <option key={kind} value={kind}>
+                {FLUTE_LABELS[kind]}
+              </option>
+            ))}
+          </select>
+        </div>
+        {params.bit.flute.kind === 'compression' &&
+          field('bit.upcutLength', 'Up-cut length', params.bit.flute.upcutLength, (p, upcutLength) => ({
+            ...p,
+            bit: { ...p.bit, flute: { kind: 'compression', upcutLength } },
+          }))}
       </fieldset>
 
       <fieldset>

@@ -29,7 +29,7 @@ export const MAX_POINTS = 1 << 23;
 /** Most tile slots (allocated or not) over the whole sheet. */
 export const MAX_TILE_SLOTS = 1 << 20;
 
-/** What cutting needs of the bit: its diameter and tip shape. */
+/** What cutting needs of the bit: its diameter and tip shape (flute direction only moves chips). */
 export type Bit = Pick<MachineParams['bit'], 'diameter' | 'shape'>;
 
 /** A straight piece of motion, as the planner's blocks give it. */
