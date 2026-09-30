@@ -108,11 +108,21 @@ describe('emitChips and stepChips', () => {
     }
   });
 
-  it('adds chips up to the capacity', () => {
+  it('makes room in a full pool by removing the oldest chips', () => {
     const chips = createChips(10);
+    const flat = () => 0;
     expect(emitChips(chips, 6, source(up), random(1))).toBe(6);
-    expect(emitChips(chips, 6, source(up), random(2))).toBe(4);
+    stepChips(chips, 0.1, 1000, flat, -20);
+    expect(emitChips(chips, 4, source(up), random(2))).toBe(4);
+    stepChips(chips, 0.1, 1000, flat, -20);
+    // Full: the next 3 replace 3 of the first 6, the oldest.
+    expect(emitChips(chips, 3, source(up), random(3))).toBe(3);
     expect(chips.count).toBe(10);
+    const ages = Array.from(chips.age.subarray(0, chips.count)).map((a) => Math.round(a * 10) / 10).sort();
+    expect(ages).toEqual([0, 0, 0, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2]);
+    // More than the pool holds: a pool of new chips.
+    expect(emitChips(chips, 25, source(up), random(4))).toBe(10);
+    expect(Array.from(chips.age.subarray(0, chips.count)).every((a) => a === 0)).toBe(true);
   });
 
   it('flies chips under gravity until they rest on the surface below them, then removes them', () => {

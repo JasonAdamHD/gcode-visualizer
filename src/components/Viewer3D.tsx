@@ -633,25 +633,26 @@ export default function Viewer3D({
   const playingRef = useRef(playing);
   // Fractions of a chip carried to the next frame, so slow cuts still throw some.
   const chipCarry = useRef(0);
-  // Where the bit was at the last slice, for the distance cut since.
-  const lastTipRef = useRef<Point3 | null>(null);
+  // True from a checkpoint restore until the stock catches up: re-cutting
+  // what was already played throws no chips.
+  const catchingUpRef = useRef(false);
   const paramsRef = useRef(params);
   /**
-   * Throws the chips the bit cut since the last slice: one per tooth pass
-   * over the distance moved, sized from the chip load and the depth it
+   * Throws the chips a slice cut: one per tooth pass over the `distance`
+   * that removed material, sized from the chip load and the depth it
    * engaged (`chipsCut`), at most MAX_CHIPS_PER_FRAME (beyond that each
-   * flake stands for several chips).
+   * flake stands for several chips). They leave the bit at `tip`, with the
+   * feed and bit of `blockIndex` (the last block that removed material).
    */
   const throwChips = useCallback(
-    (s: SceneState, volume: number, target: CutTarget, from: Point3) => {
+    (s: SceneState, volume: number, distance: number, blockIndex: number, tip: Point3) => {
       const p = paramsRef.current;
-      const block = timeline.blocks[Math.max(0, target.block)];
+      const block = timeline.blocks[blockIndex];
       const move = block ? timeline.moves[block.move] : undefined;
       const conditions = move ? cutConditions(move, p) : null;
       if (!block || !conditions) return;
       const bit = bitOfMove(tooling, block.move);
       const load = chipLoad(conditions.feedRate, conditions.rpm, bit.fluteCount);
-      const distance = Math.hypot(target.position.x - from.x, target.position.y - from.y, target.position.z - from.z);
       const cut = chipsCut(volume, distance, load, bit.diameter);
       if (!cut) return;
       const wanted = cut.count + chipCarry.current;
@@ -659,7 +660,7 @@ export default function Viewer3D({
       chipCarry.current = n === MAX_CHIPS_PER_FRAME ? 0 : wanted - n;
       const xy = Math.hypot(block.u.x, block.u.y);
       s.chips.emit(n, {
-        tip: target.position,
+        tip,
         travel: xy > 1e-6 ? { x: block.u.x / xy, y: block.u.y / xy } : { x: 0, y: 0 },
         chip: cut.size,
         bitDiameter: bit.diameter,
@@ -682,6 +683,7 @@ export default function Viewer3D({
       }
       const start = performance.now();
       const removedBefore = st.stock.removed;
+      const distanceBefore = st.sim.removingDistance;
       let restored = false;
       let result;
       do {
@@ -690,13 +692,15 @@ export default function Viewer3D({
         if (d && d.i0 === 0 && d.j0 === 0 && d.i1 === st.stock.nx - 1 && d.j1 === st.stock.ny - 1) restored = true;
         flushStock(st, result.dirty);
       } while (!result.done && performance.now() - start < SIM_FRAME_MS);
-      // Chips for what this frame of playback cut; not for catching up after a seek.
-      const from = lastTipRef.current;
-      if (playingRef.current && !restored && layersRef.current.chips && from) {
+      if (restored) catchingUpRef.current = true;
+      // Chips for whatever this slice cut while playing, even when the
+      // stock is behind at high speed; not while catching up after a seek.
+      const tip = st.sim.removingTip;
+      if (playingRef.current && !catchingUpRef.current && layersRef.current.chips && tip) {
         const volume = (st.stock.removed - removedBefore) * st.stock.dx * st.stock.dy;
-        throwChips(s, volume, target, from);
+        throwChips(s, volume, st.sim.removingDistance - distanceBefore, st.sim.lastRemovingBlock, tip);
       }
-      lastTipRef.current = result.done ? target.position : null;
+      if (result.done) catchingUpRef.current = false;
       s.render();
       if (result.done) {
         setSimProgress(null);

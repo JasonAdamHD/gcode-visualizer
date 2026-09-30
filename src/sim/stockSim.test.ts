@@ -151,9 +151,30 @@ describe('StockSimulator', () => {
     expect(denseHeights(sim.stock).every((h) => h === 0)).toBe(true);
   });
 
+  it('reports the distance, block and tip of the cuts that removed material, even partway', () => {
+    const sim = simulator();
+    expect(sim.removingTip).toBeNull();
+    expect(sim.lastRemovingBlock).toBe(-1);
+    const end = sampleTimeline(timeline, timeline.total);
+    let last = 0;
+    while (!sim.advanceTo(end, 300).done) {
+      expect(sim.removingDistance).toBeGreaterThanOrEqual(last);
+      last = sim.removingDistance;
+    }
+    // The last plunge's bottom, not the end of the retract after it.
+    expect(sim.removingTip).toEqual(p(50, 20, -12));
+    // The plunges below the top and the feeds; the retracts go up a hole
+    // already cut and the rapids stay above the top, so they remove nothing.
+    const arcLength = timeline.blocks.filter((b) => b.move === 3).reduce((a, b) => a + b.length, 0);
+    const cutting = 3 + 30 + arcLength + Math.hypot(25, 5, 4) + 12;
+    expect(sim.removingDistance).toBeCloseTo(cutting, 1);
+    expect(timeline.blocks[sim.lastRemovingBlock].move).toBe(7);
+  });
+
   it('handles an empty timeline', () => {
     const empty = buildTimeline([], params);
     const sim = simulator(empty);
+    expect(sim.removingTip).toBeNull();
     expect(sim.advanceTo(sampleTimeline(empty, 0))).toEqual({ done: true, dirty: null, progress: 1 });
   });
 

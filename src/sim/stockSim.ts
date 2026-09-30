@@ -57,6 +57,9 @@ export class StockSimulator {
   private workSinceCheckpoint = 0;
   private block = 0;
   private distance = 0;
+  private removing = 0;
+  private lastRemoving = -1;
+  private lastRemovingTip: Point3 | null = null;
 
   /** `bitOf(m)` is the bit that cuts move `m` (a program can change tools). */
   constructor(timeline: Timeline, stock: Stock, bitOf: (move: number) => Bit, options: StockSimulatorOptions = {}) {
@@ -92,7 +95,15 @@ export class StockSimulator {
       if (work >= budget) return { done: false, dirty, progress: tb > 0 ? this.block / tb : 0 };
       const b = blocks[this.block];
       const end = this.block < tb ? b.length : ts;
-      const rect = cutSegment(this.stock, pointAt(b, this.distance), pointAt(b, end), this.bitOf(b.move));
+      const removed = this.stock.removed;
+      const from = pointAt(b, this.distance);
+      const to = pointAt(b, end);
+      const rect = cutSegment(this.stock, from, to, this.bitOf(b.move));
+      if (this.stock.removed > removed) {
+        this.removing += belowTop(from, to, end - this.distance);
+        this.lastRemoving = this.block;
+        this.lastRemovingTip = to;
+      }
       const cost = 1 + (rect ? (rect.i1 - rect.i0 + 1) * (rect.j1 - rect.j0 + 1) : 0);
       work += cost;
       dirty = unionRect(dirty, rect);
@@ -106,6 +117,30 @@ export class StockSimulator {
       }
     }
     return { done: true, dirty, progress: 1 };
+  }
+
+  /**
+   * The tool tip at the end of the last piece of path that removed
+   * material, or null before any did: where the latest chips come from,
+   * even when the cut has since moved on along a retract or rapid.
+   */
+  get removingTip(): Point3 | null {
+    return this.lastRemovingTip;
+  }
+
+  /**
+   * Path length (world units), below the sheet top, of the pieces of path
+   * that removed material, summed over every cut since the simulator was
+   * made (restores do not undo it). The difference over a slice is the
+   * distance the bit cut in it.
+   */
+  get removingDistance(): number {
+    return this.removing;
+  }
+
+  /** The last block whose cut removed material, or -1 before any did. */
+  get lastRemovingBlock(): number {
+    return this.lastRemoving;
   }
 
   /** Block index and distance along it for `target`; the end of a block is the start of the next. */
@@ -149,6 +184,13 @@ export class StockSimulator {
       this.checkpointWork *= 2;
     }
   }
+}
+
+/** How much of a piece of path `length` long from `from` to `to` lies below the sheet top (z < 0). */
+function belowTop(from: Point3, to: Point3, length: number): number {
+  if (from.z < 0 && to.z < 0) return length;
+  if (from.z >= 0 && to.z >= 0) return 0;
+  return (length * -Math.min(from.z, to.z)) / Math.abs(to.z - from.z);
 }
 
 function pointAt(b: { from: Point3; u: Point3 }, distance: number): Point3 {
