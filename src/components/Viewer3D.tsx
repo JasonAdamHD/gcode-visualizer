@@ -633,6 +633,9 @@ export default function Viewer3D({
   const playingRef = useRef(playing);
   // Fractions of a chip carried to the next frame, so slow cuts still throw some.
   const chipCarry = useRef(0);
+  // True from a checkpoint restore until the stock catches up: re-cutting
+  // what was already played throws no chips.
+  const catchingUpRef = useRef(false);
   const paramsRef = useRef(params);
   /**
    * Throws the chips a slice cut: one per tooth pass over the `distance`
@@ -689,13 +692,15 @@ export default function Viewer3D({
         if (d && d.i0 === 0 && d.j0 === 0 && d.i1 === st.stock.nx - 1 && d.j1 === st.stock.ny - 1) restored = true;
         flushStock(st, result.dirty);
       } while (!result.done && performance.now() - start < SIM_FRAME_MS);
+      if (restored) catchingUpRef.current = true;
       // Chips for whatever this slice cut while playing, even when the
-      // stock is behind at high speed; not for a restore after a seek.
-      const tip = st.sim.cutTip;
-      if (playingRef.current && !restored && layersRef.current.chips && tip) {
+      // stock is behind at high speed; not while catching up after a seek.
+      const tip = st.sim.removingTip;
+      if (playingRef.current && !catchingUpRef.current && layersRef.current.chips && tip) {
         const volume = (st.stock.removed - removedBefore) * st.stock.dx * st.stock.dy;
         throwChips(s, volume, st.sim.removingDistance - distanceBefore, st.sim.lastRemovingBlock, tip);
       }
+      if (result.done) catchingUpRef.current = false;
       s.render();
       if (result.done) {
         setSimProgress(null);

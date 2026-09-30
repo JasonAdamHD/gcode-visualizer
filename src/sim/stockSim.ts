@@ -59,6 +59,7 @@ export class StockSimulator {
   private distance = 0;
   private removing = 0;
   private lastRemoving = -1;
+  private lastRemovingTip: Point3 | null = null;
 
   /** `bitOf(m)` is the bit that cuts move `m` (a program can change tools). */
   constructor(timeline: Timeline, stock: Stock, bitOf: (move: number) => Bit, options: StockSimulatorOptions = {}) {
@@ -101,6 +102,7 @@ export class StockSimulator {
       if (this.stock.removed > removed) {
         this.removing += belowTop(from, to, end - this.distance);
         this.lastRemoving = this.block;
+        this.lastRemovingTip = to;
       }
       const cost = 1 + (rect ? (rect.i1 - rect.i0 + 1) * (rect.j1 - rect.j0 + 1) : 0);
       work += cost;
@@ -117,10 +119,13 @@ export class StockSimulator {
     return { done: true, dirty, progress: 1 };
   }
 
-  /** The tool tip where the cut has got to (the start of the timeline before any cut), or null with no blocks. */
-  get cutTip(): Point3 | null {
-    const b = this.timeline.blocks[this.block];
-    return b ? pointAt(b, this.distance) : null;
+  /**
+   * The tool tip at the end of the last piece of path that removed
+   * material, or null before any did: where the latest chips come from,
+   * even when the cut has since moved on along a retract or rapid.
+   */
+  get removingTip(): Point3 | null {
+    return this.lastRemovingTip;
   }
 
   /**

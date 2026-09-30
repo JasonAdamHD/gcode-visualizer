@@ -186,10 +186,10 @@ npm run check        # lint + build + test: run before every commit
   the stock geometry during playback (only a checkpoint restore redraws it). Layers only toggle
   `visible`. A second (orthographic) camera is swapped in for Ortho.
   While playing, each simulation slice throws the chips it cut, from the
-  simulator's own progress (`removingDistance`, `cutTip`), so a slice that
+  simulator's own progress (`removingDistance`, `removingTip`), so a slice that
   falls behind at high speed still throws them (one per tooth pass, capped
   per frame; `chipView.ts`, an instanced mesh with its own animation
-  frames while chips are alive; none for a restore after a seek). A full
+  frames while chips are alive; none while catching up after a restore). A full
   pool drops its oldest chips for new ones.
   At the end of playback it shows the exact part from `useExactCut` (a
   Web Worker, `src/workers/exactCut.worker.ts`, restarted when the job
