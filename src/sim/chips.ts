@@ -159,10 +159,15 @@ export function launchChip(source: ChipSource, rand: Random): Launch {
   };
 }
 
-/** Adds up to `n` chips from `source` (as many as there is room for) and returns how many were added. */
+/**
+ * Adds `n` chips from `source` (at most the pool's capacity) and returns
+ * how many were added. A full pool makes room by removing its oldest
+ * chips, so a cut always throws its chips.
+ */
 export function emitChips(chips: Chips, n: number, source: ChipSource, rand: Random): number {
-  const room = Math.min(n, chips.capacity - chips.count);
-  for (let k = 0; k < room; k++) {
+  const add = Math.max(0, Math.min(n, chips.capacity));
+  evictOldest(chips, chips.count + add - chips.capacity);
+  for (let k = 0; k < add; k++) {
     const c = chips.count++;
     const { position: p, velocity: v } = launchChip(source, rand);
     chips.pos.set([p.x, p.y, p.z], c * 3);
@@ -179,7 +184,15 @@ export function emitChips(chips: Chips, n: number, source: ChipSource, rand: Ran
     chips.dims.set([source.chip.length * vary, source.chip.width * vary, source.chip.thickness * vary], c * 3);
     chips.landed[c] = 0;
   }
-  return room;
+  return add;
+}
+
+/** Removes the `n` oldest chips (by age), if any. */
+function evictOldest(chips: Chips, n: number) {
+  if (n <= 0) return;
+  const order = Array.from({ length: chips.count }, (_, c) => c).sort((a, b) => chips.age[b] - chips.age[a]);
+  // Highest index first: removeChip moves the last chip down, never one still to go.
+  for (const c of order.slice(0, n).sort((a, b) => b - a)) removeChip(chips, c);
 }
 
 /**
